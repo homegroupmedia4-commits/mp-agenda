@@ -1,0 +1,84 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: MP Agenda 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-01-01 00:00+0000\n"
+"PO-Revision-Date: 2026-01-01 00:00+0000\n"
+"Last-Translator: MP Rénov\n"
+"Language-Team: MP Rénov\n"
+"Language: fr_FR\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Generator: MP Agenda manual export\n"
+"X-Domain: mp-agenda\n"
+
+#. Les chaînes source du plugin sont déjà rédigées en français (text domain
+#. mp-agenda). Ce fichier fr_FR sert de base identitaire et de point de
+#. départ pour d'éventuelles variantes régionales ou reformulations futures.
+#. Pour régénérer une extraction complète et à jour des chaînes, utiliser :
+#. wp i18n make-pot . languages/mp-agenda.pot --domain=mp-agenda
+
+msgid "Planning"
+msgstr "Planning"
+
+msgid "Rendez-vous"
+msgstr "Rendez-vous"
+
+msgid "Techniciens"
+msgstr "Techniciens"
+
+msgid "Réglages"
+msgstr "Réglages"
+
+msgid "Nouveau rendez-vous"
+msgstr "Nouveau rendez-vous"
+
+msgid "Modifier le rendez-vous"
+msgstr "Modifier le rendez-vous"
+
+msgid "Aujourd'hui"
+msgstr "Aujourd'hui"
+
+msgid "Jour"
+msgstr "Jour"
+
+msgid "Semaine"
+msgstr "Semaine"
+
+msgid "En attente"
+msgstr "En attente"
+
+msgid "Confirmé"
+msgstr "Confirmé"
+
+msgid "Annulé"
+msgstr "Annulé"
+
+msgid "Terminé"
+msgstr "Terminé"
+
+msgid "Enregistrer"
+msgstr "Enregistrer"
+
+msgid "Supprimer"
+msgstr "Supprimer"
+
+msgid "Annuler"
+msgstr "Annuler"
+
+msgid "Connecter Google Agenda"
+msgstr "Connecter Google Agenda"
+
+msgid "Déconnecter"
+msgstr "Déconnecter"
+
+msgid "Exporter CSV"
+msgstr "Exporter CSV"
+
+msgid "Votre rendez-vous est confirmé !"
+msgstr "Votre rendez-vous est confirmé !"
+
+msgid "Merci de remplir tous les champs obligatoires."
+msgstr "Merci de remplir tous les champs obligatoires."
