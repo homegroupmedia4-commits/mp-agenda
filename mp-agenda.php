@@ -55,6 +55,7 @@ require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-db.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-google-sync.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-notifications.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-rest-api.php';
+require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-ajax.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-shortcode.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'admin/class-mp-agenda-admin.php';

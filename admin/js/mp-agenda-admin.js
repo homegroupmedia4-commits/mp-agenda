@@ -7,29 +7,34 @@
 	var cfg = window.mpAgendaAdmin || {};
 
 	/* ---------------------------------------------------------------------
-	 * Utilitaires REST
+	 * Utilitaires API (transport admin-ajax.php — compatible hébergeurs
+	 * qui bloquent /wp-json/)
 	 * ------------------------------------------------------------------- */
 
 	function apiRequest( path, method, body ) {
-		var url = cfg.restUrl + path;
-		var opts = {
-			method: method || 'GET',
-			headers: {
-				'X-WP-Nonce': cfg.nonce,
-				'Content-Type': 'application/json',
-			},
-		};
+		var formData = new FormData();
+		formData.append( 'action', 'mp_agenda_api' );
+		formData.append( 'nonce', cfg.nonce );
+		formData.append( 'route', path );
+		formData.append( 'method', method || 'GET' );
 		if ( body ) {
-			opts.body = JSON.stringify( body );
+			formData.append( 'data', JSON.stringify( body ) );
 		}
-		return fetch( url, opts ).then( function ( response ) {
-			return response.json().then( function ( data ) {
-				if ( ! response.ok ) {
-					var err = new Error( data.message || 'Erreur API' );
-					err.data = data;
+
+		return fetch( cfg.ajaxUrl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			body: formData,
+		} ).then( function ( response ) {
+			return response.json().then( function ( json ) {
+				if ( ! json.success ) {
+					var errData = json.data || {};
+					var err = new Error( errData.message || 'Erreur API' );
+					err.data = errData;
+					err.code = errData.code;
 					throw err;
 				}
-				return data;
+				return json.data;
 			} );
 		} );
 	}

@@ -35,35 +35,43 @@
 	};
 
 	/* --------------------------------------------------------------------
-	 * Requêtes API
+	 * Requêtes API (transport admin-ajax.php — compatible hébergeurs
+	 * qui bloquent /wp-json/)
 	 * ------------------------------------------------------------------ */
 
-	MPAgendaBooking.prototype.apiGet = function ( path ) {
-		return fetch( cfg.restUrl + path ).then( function ( response ) {
-			return response.json().then( function ( data ) {
-				if ( ! response.ok ) {
-					throw new Error( data.message || cfg.i18n.genericError );
+	function apiRequest( path, method, body ) {
+		var formData = new FormData();
+		formData.append( 'action', 'mp_agenda_api' );
+		formData.append( 'nonce', cfg.nonce );
+		formData.append( 'route', path );
+		formData.append( 'method', method || 'GET' );
+		if ( body ) {
+			formData.append( 'data', JSON.stringify( body ) );
+		}
+
+		return fetch( cfg.ajaxUrl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			body: formData,
+		} ).then( function ( response ) {
+			return response.json().then( function ( json ) {
+				if ( ! json.success ) {
+					var errData = json.data || {};
+					var err = new Error( errData.message || cfg.i18n.genericError );
+					err.code = errData.code;
+					throw err;
 				}
-				return data;
+				return json.data;
 			} );
 		} );
+	}
+
+	MPAgendaBooking.prototype.apiGet = function ( path ) {
+		return apiRequest( path, 'GET' );
 	};
 
 	MPAgendaBooking.prototype.apiPost = function ( path, body ) {
-		return fetch( cfg.restUrl + path, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify( body ),
-		} ).then( function ( response ) {
-			return response.json().then( function ( data ) {
-				if ( ! response.ok ) {
-					var err = new Error( data.message || cfg.i18n.genericError );
-					err.code = data.code;
-					throw err;
-				}
-				return data;
-			} );
-		} );
+		return apiRequest( path, 'POST', body );
 	};
 
 	/* --------------------------------------------------------------------

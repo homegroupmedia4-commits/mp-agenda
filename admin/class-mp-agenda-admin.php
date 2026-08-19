@@ -75,7 +75,8 @@ class MP_Agenda_Admin {
 			'mpAgendaAdmin',
 			array(
 				'restUrl'    => esc_url_raw( rest_url( 'mp-agenda/v1' ) ),
-				'nonce'      => wp_create_nonce( 'wp_rest' ),
+				'ajaxUrl'    => esc_url_raw( admin_url( 'admin-ajax.php' ) ),
+				'nonce'      => wp_create_nonce( 'mp_agenda_ajax' ),
 				'i18n'       => array(
 					'confirmDelete' => __( 'Voulez-vous vraiment supprimer ce rendez-vous ?', 'mp-agenda' ),
 					'saveError'     => __( 'Une erreur est survenue lors de l\'enregistrement.', 'mp-agenda' ),

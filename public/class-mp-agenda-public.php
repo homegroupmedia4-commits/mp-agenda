@@ -42,6 +42,8 @@ class MP_Agenda_Public {
 			'mpAgendaPublic',
 			array(
 				'restUrl'                => esc_url_raw( rest_url( 'mp-agenda/v1' ) ),
+				'ajaxUrl'                 => esc_url_raw( admin_url( 'admin-ajax.php' ) ),
+				'nonce'                   => wp_create_nonce( 'mp_agenda_ajax' ),
 				'bookingNonce'            => wp_create_nonce( 'mp_agenda_booking' ),
 				'requireTechnicianChoice' => ! empty( $settings['require_technician_choice'] ),
 				'gdprText'                => wp_kses_post( get_option( 'mp_agenda_gdpr_text', '' ) ),

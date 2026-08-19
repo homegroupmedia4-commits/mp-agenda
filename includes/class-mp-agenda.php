@@ -39,6 +39,13 @@ class MP_Agenda {
 	protected $rest_api;
 
 	/**
+	 * Instance du transport admin-ajax.php (repli si l'API REST est bloquée côté hébergeur).
+	 *
+	 * @var MP_Agenda_Ajax
+	 */
+	protected $ajax;
+
+	/**
 	 * Instance de la synchronisation Google.
 	 *
 	 * @var MP_Agenda_Google_Sync
@@ -59,6 +66,7 @@ class MP_Agenda {
 		$this->admin         = new MP_Agenda_Admin();
 		$this->public_area   = new MP_Agenda_Public();
 		$this->rest_api      = new MP_Agenda_REST_API();
+		$this->ajax          = new MP_Agenda_Ajax( $this->rest_api );
 		$this->google_sync   = new MP_Agenda_Google_Sync();
 		$this->notifications = new MP_Agenda_Notifications();
 
@@ -77,6 +85,7 @@ class MP_Agenda {
 		$this->admin->init();
 		$this->public_area->init();
 		$this->rest_api->init();
+		$this->ajax->init();
 		$this->google_sync->init();
 	}
 
