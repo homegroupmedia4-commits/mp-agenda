@@ -87,6 +87,16 @@ class MP_Agenda_REST_API {
 
 		register_rest_route(
 			$this->namespace,
+			'/debug',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_debug_info' ),
+				'permission_callback' => array( $this, 'admin_permission_callback' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/technicians',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -380,6 +390,93 @@ class MP_Agenda_REST_API {
 		$items = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
 		return new WP_REST_Response( array( 'items' => $items ), 200 );
+	}
+
+	/**
+	 * Endpoint de diagnostic TEMPORAIRE : exécute get_appointments() et la logique
+	 * de get_blocked_slots() directement, avec affichage complet des erreurs,
+	 * pour identifier la cause exacte des erreurs 500 sur ces deux endpoints.
+	 *
+	 * À SUPPRIMER une fois le diagnostic terminé (route dans register_routes() et cette méthode).
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_debug_info() {
+		error_reporting( E_ALL ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_reporting
+		ini_set( 'display_errors', '1' ); // phpcs:ignore WordPress.PHP.IniSet.display_errors_Blacklisted
+
+		global $wpdb;
+
+		$result = array(
+			'php_version'     => PHP_VERSION,
+			'appointments'    => null,
+			'blocked_slots'   => null,
+			'wpdb_last_error' => '',
+		);
+
+		try {
+			$result['appointments'] = MP_Agenda_DB::get_appointments(
+				array(
+					'from' => '2026-08-19',
+					'to'   => '2026-08-19',
+				)
+			);
+		} catch ( \Throwable $e ) {
+			$result['appointments'] = $this->format_debug_exception( $e );
+		}
+
+		try {
+			$from          = '2026-08-19';
+			$to            = '2026-08-19';
+			$technician_id = 0;
+
+			$table  = MP_Agenda_DB::table_blocked_slots();
+			$where  = array( '1=1' );
+			$params = array();
+
+			if ( $from ) {
+				$where[]  = 'start_datetime <= %s';
+				$params[] = $to ? $to . ' 23:59:59' : $from . ' 23:59:59';
+			}
+			if ( $to || $from ) {
+				$where[]  = 'end_datetime >= %s';
+				$params[] = $from . ' 00:00:00';
+			}
+			if ( $technician_id ) {
+				$where[]  = 'technician_id = %d';
+				$params[] = $technician_id;
+			}
+
+			$sql = 'SELECT * FROM ' . $table . ' WHERE ' . implode( ' AND ', $where );
+			if ( ! empty( $params ) ) {
+				$sql = $wpdb->prepare( $sql, $params ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			}
+
+			$result['blocked_slots'] = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			$result['blocked_slots'] = $this->format_debug_exception( $e );
+		}
+
+		$result['wpdb_last_error'] = $wpdb->last_error;
+
+		return new WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * Formate une exception/erreur pour l'endpoint de diagnostic.
+	 *
+	 * @param \Throwable $e Exception ou erreur capturée.
+	 * @return array
+	 */
+	private function format_debug_exception( \Throwable $e ) {
+		return array(
+			'error'   => true,
+			'class'   => get_class( $e ),
+			'message' => $e->getMessage(),
+			'file'    => $e->getFile(),
+			'line'    => $e->getLine(),
+			'trace'   => $e->getTraceAsString(),
+		);
 	}
 
 	/* ---------------------------------------------------------------------

@@ -5,7 +5,7 @@
  * Description:       Système de prise de rendez-vous simplifié pour MP Rénov, avec planning visuel, formulaire client et synchronisation Google Agenda.
  * Version:           1.0.0
  * Requires at least: 6.4
- * Requires PHP:      8.1
+ * Requires PHP:      7.4
  * Author:             MP Rénov
  * Text Domain:       mp-agenda
  * Domain Path:       /languages
@@ -18,6 +18,22 @@
 // Empêche l'accès direct au fichier.
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
+}
+
+/**
+ * Vérifie que la version de PHP minimale requise est disponible.
+ * Empêche le chargement du plugin (et une erreur fatale) sur un hébergement trop ancien.
+ */
+if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
+	add_action(
+		'admin_notices',
+		function () {
+			echo '<div class="notice notice-error"><p>';
+			echo esc_html__( 'MP Agenda nécessite PHP 7.4 ou supérieur. Veuillez mettre à jour PHP pour activer ce plugin.', 'mp-agenda' );
+			echo '</p></div>';
+		}
+	);
+	return;
 }
 
 /**
