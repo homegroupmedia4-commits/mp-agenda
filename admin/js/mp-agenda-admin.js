@@ -554,8 +554,13 @@
 	 * ------------------------------------------------------------------- */
 
 	function initGoogleSync() {
-		document.querySelectorAll( '.mp-agenda-sync-google-btn' ).forEach( function ( btn ) {
+		var buttons = document.querySelectorAll( '.mp-agenda-sync-google-btn' );
+		console.log( '[MP Agenda] initGoogleSync : ' + buttons.length + ' bouton(s) trouvé(s).' );
+
+		buttons.forEach( function ( btn ) {
 			btn.addEventListener( 'click', function () {
+				console.log( '[MP Agenda] Clic sur "Synchroniser Google" — envoi de POST /google/sync via admin-ajax.php.' );
+
 				var originalText = btn.textContent;
 				var statusEl = btn.parentElement.querySelector( '.mp-agenda-sync-status' );
 
@@ -566,7 +571,8 @@
 				}
 
 				apiRequest( '/google/sync', 'POST' )
-					.then( function () {
+					.then( function ( data ) {
+						console.log( '[MP Agenda] Synchronisation Google réussie.', data );
 						btn.disabled = false;
 						btn.textContent = originalText;
 						if ( statusEl ) {
@@ -575,6 +581,7 @@
 						document.dispatchEvent( new CustomEvent( 'mp-agenda-refresh' ) );
 					} )
 					.catch( function ( err ) {
+						console.error( '[MP Agenda] Échec de la synchronisation Google :', err );
 						btn.disabled = false;
 						btn.textContent = originalText;
 						if ( statusEl ) {

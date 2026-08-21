@@ -3,7 +3,7 @@
  * Plugin Name:       MP Agenda
  * Plugin URI:         https://mp-renov.fr/
  * Description:       Système de prise de rendez-vous simplifié pour MP Rénov, avec planning visuel, formulaire client et synchronisation Google Agenda.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:             MP Rénov
@@ -39,7 +39,7 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
 /**
  * Constantes globales du plugin.
  */
-define( 'MP_AGENDA_VERSION', '1.0.0' );
+define( 'MP_AGENDA_VERSION', '1.0.1' );
 define( 'MP_AGENDA_DB_VERSION', '1.0.0' );
 define( 'MP_AGENDA_PLUGIN_FILE', __FILE__ );
 define( 'MP_AGENDA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
