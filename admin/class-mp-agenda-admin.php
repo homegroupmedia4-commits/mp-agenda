@@ -81,6 +81,9 @@ class MP_Agenda_Admin {
 					'confirmDelete' => __( 'Voulez-vous vraiment supprimer ce rendez-vous ?', 'mp-agenda' ),
 					'saveError'     => __( 'Une erreur est survenue lors de l\'enregistrement.', 'mp-agenda' ),
 					'slotTaken'     => __( 'Ce créneau n\'est plus disponible.', 'mp-agenda' ),
+					'syncing'       => __( 'Synchronisation…', 'mp-agenda' ),
+					'syncSuccess'   => __( 'Synchronisé ✓', 'mp-agenda' ),
+					'syncError'     => __( 'Échec de la synchronisation Google.', 'mp-agenda' ),
 				),
 				'statusLabels' => array(
 					'pending'   => __( 'En attente', 'mp-agenda' ),

@@ -35,6 +35,8 @@ $mp_technicians = MP_Agenda_DB::get_technicians( true );
 			<?php foreach ( $mp_technicians as $mp_tech ) : ?>
 				<button type="button" class="button mp-agenda-filter-btn" data-technician="<?php echo esc_attr( $mp_tech['id'] ); ?>"><?php echo esc_html( $mp_tech['name'] ); ?></button>
 			<?php endforeach; ?>
+			<button type="button" class="button mp-agenda-sync-google-btn">🔄 <?php esc_html_e( 'Synchroniser Google', 'mp-agenda' ); ?></button>
+			<span class="mp-agenda-sync-status"></span>
 			<button type="button" class="button button-primary mp-agenda-new-appointment"><?php esc_html_e( '+ Nouveau RDV', 'mp-agenda' ); ?></button>
 		</div>
 	</div>

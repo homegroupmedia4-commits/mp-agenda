@@ -28,6 +28,14 @@ $mp_hours = array();
 if ( $mp_editing && ! empty( $mp_editing['working_hours'] ) ) {
 	$mp_hours = json_decode( $mp_editing['working_hours'], true );
 }
+
+$mp_has_connected_technician = false;
+foreach ( $mp_technicians as $mp_tech_check ) {
+	if ( ! empty( $mp_tech_check['google_refresh_token'] ) ) {
+		$mp_has_connected_technician = true;
+		break;
+	}
+}
 ?>
 <div class="wrap mp-agenda-wrap">
 	<h1 class="mp-agenda-title"><?php esc_html_e( 'Techniciens', 'mp-agenda' ); ?></h1>
@@ -110,7 +118,19 @@ if ( $mp_editing && ! empty( $mp_editing['working_hours'] ) ) {
 		</div>
 
 		<div class="mp-agenda-card">
-			<h2><?php esc_html_e( 'Liste des techniciens', 'mp-agenda' ); ?></h2>
+			<div class="mp-agenda-card-header">
+				<h2><?php esc_html_e( 'Liste des techniciens', 'mp-agenda' ); ?></h2>
+				<?php if ( $mp_has_connected_technician ) : ?>
+					<span>
+						<button type="button" class="button mp-agenda-sync-google-btn">🔄 <?php esc_html_e( 'Forcer la synchronisation Google', 'mp-agenda' ); ?></button>
+						<span class="mp-agenda-sync-status"></span>
+					</span>
+				<?php endif; ?>
+			</div>
+
+			<?php if ( $mp_has_connected_technician ) : ?>
+				<p class="mp-agenda-text-secondary"><?php esc_html_e( 'La synchronisation automatique tourne toutes les 5 minutes via le cron WordPress. Sur certains hébergements, ce cron peut être retardé ou inactif : utilisez ce bouton pour forcer immédiatement la récupération des événements Google Agenda (RDV créés côté plugin ET créneaux bloqués créés directement dans Google Agenda).', 'mp-agenda' ); ?></p>
+			<?php endif; ?>
 
 			<?php foreach ( $mp_technicians as $mp_tech ) : ?>
 				<div class="mp-agenda-technician-row">

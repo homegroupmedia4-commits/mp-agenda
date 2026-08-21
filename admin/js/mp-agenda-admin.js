@@ -544,6 +544,48 @@
 	}
 
 	/* ---------------------------------------------------------------------
+	 * Synchronisation Google manuelle (planning + page Techniciens)
+	 *
+	 * Le cron WordPress (mp_agenda_google_sync_cron) n'est déclenché que par
+	 * une visite du site et peut donc être retardé sur certains hébergements.
+	 * Ces boutons appellent directement POST /google/sync pour forcer
+	 * immédiatement l'import des événements Google Agenda (RDV + créneaux
+	 * bloqués) sans attendre le prochain passage du cron.
+	 * ------------------------------------------------------------------- */
+
+	function initGoogleSync() {
+		document.querySelectorAll( '.mp-agenda-sync-google-btn' ).forEach( function ( btn ) {
+			btn.addEventListener( 'click', function () {
+				var originalText = btn.textContent;
+				var statusEl = btn.parentElement.querySelector( '.mp-agenda-sync-status' );
+
+				btn.disabled = true;
+				btn.textContent = cfg.i18n.syncing;
+				if ( statusEl ) {
+					statusEl.textContent = '';
+				}
+
+				apiRequest( '/google/sync', 'POST' )
+					.then( function () {
+						btn.disabled = false;
+						btn.textContent = originalText;
+						if ( statusEl ) {
+							statusEl.textContent = cfg.i18n.syncSuccess;
+						}
+						document.dispatchEvent( new CustomEvent( 'mp-agenda-refresh' ) );
+					} )
+					.catch( function ( err ) {
+						btn.disabled = false;
+						btn.textContent = originalText;
+						if ( statusEl ) {
+							statusEl.textContent = err.message || cfg.i18n.syncError;
+						}
+					} );
+			} );
+		} );
+	}
+
+	/* ---------------------------------------------------------------------
 	 * Liste des rendez-vous (page Appointments)
 	 * ------------------------------------------------------------------- */
 
@@ -587,5 +629,6 @@
 		Modal.init();
 		Calendar.init();
 		initAppointmentsList();
+		initGoogleSync();
 	} );
 } )();

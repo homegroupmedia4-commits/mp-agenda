@@ -35,6 +35,23 @@
 	margin-bottom: 20px;
 }
 
+.mp-agenda-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 16px;
+}
+.mp-agenda-card-header h2 {
+	margin: 0;
+}
+.mp-agenda-sync-status {
+	margin-left: 8px;
+	color: var(--mp-text-secondary);
+	font-size: 12px;
+}
+
 .mp-agenda-grid {
 	display: grid;
 	gap: 20px;
