@@ -1,8 +1,8 @@
 /* MP Agenda — Styles de l'interface d'administration */
 
 :root {
-	--mp-primary: #2563eb;
-	--mp-primary-dark: #1d4ed8;
+	--mp-primary: #61CE70;
+	--mp-primary-dark: #4db85c;
 	--mp-success: #16a34a;
 	--mp-warning: #f59e0b;
 	--mp-danger: #dc2626;
@@ -323,6 +323,10 @@
 	font-weight: 600;
 	border-left: 1px solid var(--mp-border);
 	font-size: 13px;
+}
+.mp-agenda-cal-tech-name {
+	/* Noms des techniciens masqués dans les en-têtes de colonnes du planning. */
+	display: none;
 }
 .mp-agenda-cal-time-col {
 	width: 64px;

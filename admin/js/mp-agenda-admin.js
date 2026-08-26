@@ -436,7 +436,8 @@
 			html += '<div class="mp-agenda-cal-header" style="grid-template-columns:64px repeat(' + columns.length + ', 1fr);">';
 			html += '<div class="mp-agenda-cal-header-cell mp-agenda-cal-time-col"></div>';
 			columns.forEach( function ( col ) {
-				var label = 'week' === self.view ? dayNames[ col.dateObj.getDay() ] + ' ' + col.dateObj.getDate() + '<br>' + col.technicianName : col.technicianName;
+				var nameHtml = '<span class="mp-agenda-cal-tech-name">' + col.technicianName + '</span>';
+				var label = 'week' === self.view ? dayNames[ col.dateObj.getDay() ] + ' ' + col.dateObj.getDate() + '<br>' + nameHtml : nameHtml;
 				html += '<div class="mp-agenda-cal-header-cell">' + label + '</div>';
 			} );
 			html += '</div>';

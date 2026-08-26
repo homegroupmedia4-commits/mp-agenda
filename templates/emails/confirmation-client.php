@@ -24,7 +24,7 @@ $company_name = $settings['company_name'] ?? get_bloginfo( 'name' );
 			<td align="center">
 				<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;">
 					<tr>
-						<td style="background:#2563eb;padding:20px 32px;">
+						<td style="background:#61CE70;padding:20px 32px;">
 							<h1 style="color:#ffffff;font-size:18px;margin:0;"><?php echo esc_html( $company_name ); ?></h1>
 						</td>
 					</tr>
