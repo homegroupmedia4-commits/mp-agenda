@@ -7,6 +7,16 @@
 	var cfg = window.mpAgendaPublic || {};
 	var dayMap = [ 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat' ];
 
+	var STEP_META = {
+		'1': { icon: '🏬', title: 'Showroom', desc: 'Choisissez le showroom le plus proche de chez vous.' },
+		'2': { icon: '🛠️', title: 'Services', desc: 'Sélectionnez le service qui correspond à votre projet.' },
+		'3': { icon: '🧑‍💼', title: 'Commercial', desc: 'Choisissez votre commercial ou laissez-nous choisir pour vous.' },
+		'4': { icon: '📅', title: 'Date & heure', desc: 'Choisissez le créneau qui vous convient le mieux.' },
+		'5': { icon: '📝', title: 'Vos informations', desc: 'Renseignez vos coordonnées pour finaliser la demande.' },
+		'6': { icon: '✅', title: 'Confirmation', desc: 'Vérifiez le récapitulatif avant de confirmer votre rendez-vous.' },
+		success: { icon: '🎉', title: 'C\'est confirmé !', desc: 'Merci, à très bientôt.' },
+	};
+
 	document.addEventListener( 'DOMContentLoaded', function () {
 		var root = document.getElementById( 'mp-agenda-booking-root' );
 		if ( ! root ) {
@@ -18,15 +28,22 @@
 	function MPAgendaBooking( root ) {
 		this.root = root;
 		this.form = root.querySelector( '#mp-agenda-booking-form' );
+
 		this.showrooms = [];
-		this.selectedShowroomId = 0; // 0 = aucun showroom sélectionné (pas de filtre).
+		this.selectedShowroomId = 0;
+
+		this.services = [];
+		this.selectedServiceId = 0;
+		this.selectedServiceDuration = 60;
+
 		this.technicians = [];
 		this.selectedTechnicianId = 0; // 0 = "peu importe".
+		this.selectedTechnicianForSlot = null;
+
 		this.currentMonth = new Date();
 		this.currentMonth.setDate( 1 );
 		this.selectedDate = null;
 		this.selectedTime = null;
-		this.selectedTechnicianForSlot = null;
 	}
 
 	MPAgendaBooking.prototype.init = function () {
@@ -34,6 +51,7 @@
 		this.bindCalendarNav();
 		this.bindSubmit();
 		this.loadShowrooms();
+		this.loadServices();
 		this.loadTechnicians();
 	};
 
@@ -101,7 +119,7 @@
 			toRecapBtn.addEventListener( 'click', function () {
 				if ( self.validateInfoStep() ) {
 					self.renderRecap();
-					self.goToStep( '5' );
+					self.goToStep( '6' );
 				}
 			} );
 		}
@@ -119,7 +137,45 @@
 			indicator.classList.toggle( 'done', indicatorStep < target );
 		} );
 
+		this.updateSidebar( step );
 		this.root.scrollIntoView( { behavior: 'smooth', block: 'start' } );
+	};
+
+	MPAgendaBooking.prototype.updateSidebar = function ( step ) {
+		var meta = STEP_META[ step ];
+		if ( ! meta ) {
+			return;
+		}
+		var iconEl = document.getElementById( 'mp-agenda-sidebar-icon' );
+		var titleEl = document.getElementById( 'mp-agenda-sidebar-title' );
+		var descEl = document.getElementById( 'mp-agenda-sidebar-desc' );
+		if ( iconEl ) {
+			iconEl.textContent = meta.icon;
+		}
+		if ( titleEl ) {
+			titleEl.textContent = meta.title;
+		}
+		if ( descEl ) {
+			descEl.textContent = meta.desc;
+		}
+	};
+
+	/* --------------------------------------------------------------------
+	 * Fiche récapitulative (sidebar droite)
+	 * ------------------------------------------------------------------ */
+
+	MPAgendaBooking.prototype.setFicheRow = function ( key, value ) {
+		var row = this.root.querySelector( '[data-fiche-row="' + key + '"]' );
+		var valueEl = document.getElementById( 'mp-agenda-fiche-' + key );
+		if ( ! row || ! valueEl ) {
+			return;
+		}
+		if ( value ) {
+			valueEl.textContent = value;
+			row.hidden = false;
+		} else {
+			row.hidden = true;
+		}
 	};
 
 	/* --------------------------------------------------------------------
@@ -174,19 +230,104 @@
 		} );
 		cardEl.classList.add( 'is-selected' );
 
-		// Le showroom détermine les techniciens disponibles : on réinitialise la suite.
+		var showroom = this.showrooms.filter( function ( s ) {
+			return parseInt( s.id, 10 ) === this.selectedShowroomId;
+		}, this )[ 0 ];
+
+		this.setFicheRow( 'showroom', showroom ? showroom.name : '' );
+		this.updateSidebarPhone( showroom );
+
+		// Le showroom détermine les commerciaux disponibles : on réinitialise la suite.
 		this.selectedTechnicianId = 0;
 		this.selectedDate = null;
 		this.selectedTime = null;
 		this.root.querySelectorAll( '.mp-agenda-technician-card' ).forEach( function ( c ) {
 			c.classList.remove( 'is-selected' );
 		} );
+		this.setFicheRow( 'technician', '' );
+		this.setFicheRow( 'datetime', '' );
 
 		this.loadTechnicians();
 	};
 
+	MPAgendaBooking.prototype.updateSidebarPhone = function ( showroom ) {
+		var wrap = document.getElementById( 'mp-agenda-sidebar-phone' );
+		var link = document.getElementById( 'mp-agenda-sidebar-phone-link' );
+		if ( ! wrap || ! link ) {
+			return;
+		}
+		if ( showroom && showroom.phone ) {
+			link.href = 'tel:' + showroom.phone.replace( /\s+/g, '' );
+			link.textContent = showroom.phone;
+			wrap.hidden = false;
+		} else {
+			wrap.hidden = true;
+		}
+	};
+
 	/* --------------------------------------------------------------------
-	 * Étape 2 : Technicien
+	 * Étape 2 : Services
+	 * ------------------------------------------------------------------ */
+
+	MPAgendaBooking.prototype.loadServices = function () {
+		var self = this;
+		this.apiGet( '/services' )
+			.then( function ( data ) {
+				self.services = data.items || [];
+				self.renderServiceCards();
+			} )
+			.catch( function () {
+				document.getElementById( 'mp-agenda-service-cards' ).innerHTML = '<div class="mp-agenda-empty">' + cfg.i18n.genericError + '</div>';
+			} );
+	};
+
+	MPAgendaBooking.prototype.renderServiceCards = function () {
+		var self = this;
+		var container = document.getElementById( 'mp-agenda-service-cards' );
+		container.innerHTML = '';
+
+		if ( ! this.services.length ) {
+			container.innerHTML = '<div class="mp-agenda-empty">' + cfg.i18n.noServices + '</div>';
+			return;
+		}
+
+		this.services.forEach( function ( service ) {
+			var card = document.createElement( 'div' );
+			card.className = 'mp-agenda-service-card';
+			card.dataset.serviceId = service.id;
+
+			card.innerHTML =
+				'<div class="mp-agenda-service-icon">' + ( service.icon || '🛠️' ) + '</div>' +
+				'<strong>' + escapeHtml( service.name ) + '</strong>' +
+				( service.description ? '<span>' + escapeHtml( service.description ) + '</span>' : '' );
+
+			card.addEventListener( 'click', function () {
+				self.selectService( service, card );
+			} );
+
+			container.appendChild( card );
+		} );
+	};
+
+	MPAgendaBooking.prototype.selectService = function ( service, cardEl ) {
+		this.selectedServiceId = parseInt( service.id, 10 );
+		this.selectedServiceDuration = parseInt( service.duration, 10 ) || 60;
+
+		this.root.querySelectorAll( '.mp-agenda-service-card' ).forEach( function ( c ) {
+			c.classList.remove( 'is-selected' );
+		} );
+		cardEl.classList.add( 'is-selected' );
+
+		this.setFicheRow( 'service', service.name );
+
+		// La durée du créneau dépend du service : on réinitialise la date/heure.
+		this.selectedDate = null;
+		this.selectedTime = null;
+		this.setFicheRow( 'datetime', '' );
+	};
+
+	/* --------------------------------------------------------------------
+	 * Étape 3 : Commercial
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.loadTechnicians = function () {
@@ -223,7 +364,7 @@
 			card.innerHTML = media + '<strong>' + escapeHtml( tech.name ) + '</strong>' + ( tech.zone ? '<span>' + escapeHtml( tech.zone ) + '</span>' : '' );
 
 			card.addEventListener( 'click', function () {
-				self.selectTechnician( tech.id, card );
+				self.selectTechnician( tech.id, tech.name, card );
 			} );
 
 			container.appendChild( card );
@@ -235,26 +376,29 @@
 			anyCard.dataset.technicianId = '0';
 			anyCard.innerHTML = '<div class="mp-agenda-technician-avatar-placeholder">?</div><strong>' + cfg.i18n.anyTechnician + '</strong>';
 			anyCard.addEventListener( 'click', function () {
-				self.selectTechnician( 0, anyCard );
+				self.selectTechnician( 0, cfg.i18n.anyTechnician, anyCard );
 			} );
 			container.appendChild( anyCard );
 		}
 	};
 
-	MPAgendaBooking.prototype.selectTechnician = function ( id, cardEl ) {
+	MPAgendaBooking.prototype.selectTechnician = function ( id, name, cardEl ) {
 		this.selectedTechnicianId = parseInt( id, 10 );
 		this.root.querySelectorAll( '.mp-agenda-technician-card' ).forEach( function ( c ) {
 			c.classList.remove( 'is-selected' );
 		} );
 		cardEl.classList.add( 'is-selected' );
 
-		// Réinitialise la sélection de date/heure si on change de technicien.
+		this.setFicheRow( 'technician', name );
+
+		// Réinitialise la sélection de date/heure si on change de commercial.
 		this.selectedDate = null;
 		this.selectedTime = null;
+		this.setFicheRow( 'datetime', '' );
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 3 : Mini-calendrier & créneaux
+	 * Étape 4 : Mini-calendrier & créneaux
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.bindCalendarNav = function () {
@@ -268,8 +412,8 @@
 			self.renderCalendar();
 		} );
 
-		// Rend le calendrier au premier passage à l'étape 3 (Date & heure).
-		this.root.querySelectorAll( '[data-next="3"]' ).forEach( function ( btn ) {
+		// Rend le calendrier au premier passage à l'étape 4 (Date & heure).
+		this.root.querySelectorAll( '[data-next="4"]' ).forEach( function ( btn ) {
 			btn.addEventListener( 'click', function () {
 				self.renderCalendar();
 			} );
@@ -375,11 +519,12 @@
 		slotsEl.innerHTML = '<div class="mp-agenda-loading">' + cfg.i18n.loading + '</div>';
 
 		var techs = this.getTechniciansForAvailability();
+		var duration = this.selectedServiceDuration || 60;
 
 		Promise.all(
 			techs.map( function ( tech ) {
 				return self
-					.apiGet( '/available-slots?technician_id=' + tech.id + '&date=' + self.selectedDate + '&duration=60' )
+					.apiGet( '/available-slots?technician_id=' + tech.id + '&date=' + self.selectedDate + '&duration=' + duration )
 					.then( function ( data ) {
 						return { technician: tech, slots: data.slots || [] };
 					} )
@@ -397,7 +542,7 @@
 		var slotsEl = document.getElementById( 'mp-agenda-slots' );
 		slotsEl.innerHTML = '';
 
-		// Fusionne les créneaux de tous les techniciens interrogés (dédoublonnés, triés).
+		// Fusionne les créneaux de tous les commerciaux interrogés (dédoublonnés, triés).
 		var slotMap = {};
 		results.forEach( function ( result ) {
 			result.slots.forEach( function ( time ) {
@@ -434,20 +579,26 @@
 			b.classList.remove( 'is-selected' );
 		} );
 		btnEl.classList.add( 'is-selected' );
+
+		if ( this.selectedDate ) {
+			var dateObj = new Date( this.selectedDate + 'T00:00:00' );
+			var label = dateObj.toLocaleDateString( 'fr-FR', { day: 'numeric', month: 'long' } ) + ' à ' + time;
+			this.setFicheRow( 'datetime', label );
+		}
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 4 : validation
+	 * Étape 5 : validation
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.validateInfoStep = function () {
-		var errorEl = document.getElementById( 'mp-agenda-step4-error' );
+		var errorEl = document.getElementById( 'mp-agenda-step5-error' );
 		errorEl.hidden = true;
 
 		if ( ! this.selectedDate || ! this.selectedTime ) {
 			errorEl.textContent = cfg.i18n.selectSlot;
 			errorEl.hidden = false;
-			this.goToStep( '3' );
+			this.goToStep( '4' );
 			return false;
 		}
 
@@ -472,7 +623,7 @@
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 5 : récapitulatif & envoi
+	 * Étape 6 : récapitulatif & envoi
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.renderRecap = function () {
@@ -485,22 +636,25 @@
 			return parseInt( s.id, 10 ) === parseInt( this.selectedShowroomId, 10 );
 		}, this )[ 0 ];
 
+		var service = this.services.filter( function ( s ) {
+			return parseInt( s.id, 10 ) === parseInt( this.selectedServiceId, 10 );
+		}, this )[ 0 ];
+
 		var date = new Date( this.selectedDate + 'T00:00:00' );
 		var dateLabel = date.toLocaleDateString( 'fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } );
 
 		var name = document.getElementById( 'mp-agenda-name' ).value;
 		var phone = document.getElementById( 'mp-agenda-phone' ).value;
 		var address = document.getElementById( 'mp-agenda-address' ).value;
-		var type = document.getElementById( 'mp-agenda-type' ).value;
 
 		document.getElementById( 'mp-agenda-recap' ).innerHTML =
 			'<dl>' +
 			( showroom ? '<dt>Showroom</dt><dd>' + escapeHtml( showroom.name ) + '</dd>' : '' ) +
-			'<dt>Technicien</dt><dd>' + escapeHtml( tech ? tech.name : '' ) + '</dd>' +
+			( service ? '<dt>Service</dt><dd>' + escapeHtml( service.name ) + '</dd>' : '' ) +
+			'<dt>Commercial</dt><dd>' + escapeHtml( tech ? tech.name : '' ) + '</dd>' +
 			'<dt>Date et heure</dt><dd>' + escapeHtml( dateLabel ) + ' à ' + escapeHtml( this.selectedTime ) + '</dd>' +
 			'<dt>Client</dt><dd>' + escapeHtml( name ) + ' — ' + escapeHtml( phone ) + '</dd>' +
 			'<dt>Adresse</dt><dd>' + escapeHtml( address ) + '</dd>' +
-			'<dt>Type d\'intervention</dt><dd>' + escapeHtml( type ) + '</dd>' +
 			'</dl>';
 	};
 
@@ -514,7 +668,7 @@
 
 	MPAgendaBooking.prototype.submitBooking = function () {
 		var self = this;
-		var errorEl = document.getElementById( 'mp-agenda-step5-error' );
+		var errorEl = document.getElementById( 'mp-agenda-step6-error' );
 		errorEl.hidden = true;
 
 		var submitBtn = document.getElementById( 'mp-agenda-submit' );
@@ -524,13 +678,14 @@
 
 		var payload = {
 			technician_id: techId,
+			service_id: this.selectedServiceId || null,
+			duration: this.selectedServiceDuration || 60,
 			date: this.selectedDate,
 			time: this.selectedTime,
 			client_name: document.getElementById( 'mp-agenda-name' ).value,
 			client_phone: document.getElementById( 'mp-agenda-phone' ).value,
 			client_email: document.getElementById( 'mp-agenda-email' ).value,
 			client_address: document.getElementById( 'mp-agenda-address' ).value,
-			intervention_type: document.getElementById( 'mp-agenda-type' ).value,
 			notes: document.getElementById( 'mp-agenda-notes' ).value,
 			gdpr_accepted: document.getElementById( 'mp-agenda-gdpr' ).checked,
 			booking_nonce: cfg.bookingNonce,
@@ -547,7 +702,7 @@
 				errorEl.hidden = false;
 
 				if ( 'mp_agenda_slot_taken' === err.code ) {
-					self.goToStep( '3' );
+					self.goToStep( '4' );
 					self.loadSlots();
 				}
 			} )

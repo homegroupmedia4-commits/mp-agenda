@@ -26,8 +26,11 @@ msgstr "Planning"
 msgid "Rendez-vous"
 msgstr "Rendez-vous"
 
-msgid "Techniciens"
-msgstr "Techniciens"
+msgid "Commerciaux"
+msgstr "Commerciaux"
+
+msgid "Services"
+msgstr "Services"
 
 msgid "Réglages"
 msgstr "Réglages"

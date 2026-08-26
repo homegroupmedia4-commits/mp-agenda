@@ -66,7 +66,7 @@ $mp_total_pages = (int) ceil( $mp_total / $mp_per_page );
 			<input type="text" name="search" placeholder="<?php esc_attr_e( 'Nom ou téléphone…', 'mp-agenda' ); ?>" value="<?php echo esc_attr( $mp_filters['search'] ); ?>" />
 
 			<select name="technician_id">
-				<option value=""><?php esc_html_e( 'Tous les techniciens', 'mp-agenda' ); ?></option>
+				<option value=""><?php esc_html_e( 'Tous les commerciaux', 'mp-agenda' ); ?></option>
 				<?php foreach ( $mp_technicians as $mp_tech ) : ?>
 					<option value="<?php echo esc_attr( $mp_tech['id'] ); ?>" <?php selected( $mp_filters['technician_id'], $mp_tech['id'] ); ?>><?php echo esc_html( $mp_tech['name'] ); ?></option>
 				<?php endforeach; ?>
@@ -90,9 +90,9 @@ $mp_total_pages = (int) ceil( $mp_total / $mp_per_page );
 			<thead>
 				<tr>
 					<th><?php esc_html_e( 'Date & heure', 'mp-agenda' ); ?></th>
-					<th><?php esc_html_e( 'Technicien', 'mp-agenda' ); ?></th>
+					<th><?php esc_html_e( 'Commercial', 'mp-agenda' ); ?></th>
 					<th><?php esc_html_e( 'Client', 'mp-agenda' ); ?></th>
-					<th><?php esc_html_e( 'Type', 'mp-agenda' ); ?></th>
+					<th><?php esc_html_e( 'Service', 'mp-agenda' ); ?></th>
 					<th><?php esc_html_e( 'Statut', 'mp-agenda' ); ?></th>
 					<th><?php esc_html_e( 'Source', 'mp-agenda' ); ?></th>
 					<th><?php esc_html_e( 'Actions', 'mp-agenda' ); ?></th>
@@ -110,7 +110,7 @@ $mp_total_pages = (int) ceil( $mp_total / $mp_per_page );
 						<td><?php echo esc_html( $mp_date->format( 'd/m/Y' ) . ' à ' . $mp_date->format( 'H:i' ) ); ?></td>
 						<td><?php echo esc_html( $mp_appt['technician_name'] ); ?></td>
 						<td><?php echo esc_html( $mp_appt['client_name'] ); ?><br /><span class="mp-agenda-text-secondary"><?php echo esc_html( $mp_appt['client_phone'] ); ?></span></td>
-						<td><?php echo esc_html( $mp_appt['intervention_type'] ); ?></td>
+						<td><?php echo esc_html( ! empty( $mp_appt['service_name'] ) ? $mp_appt['service_name'] : $mp_appt['intervention_type'] ); ?></td>
 						<td><span class="mp-agenda-badge mp-agenda-badge-<?php echo esc_attr( $mp_appt['status'] ); ?>"><?php echo esc_html( $mp_status_labels[ $mp_appt['status'] ] ?? $mp_appt['status'] ); ?></span></td>
 						<td><?php echo esc_html( $mp_source_labels[ $mp_appt['source'] ] ?? $mp_appt['source'] ); ?></td>
 						<td>

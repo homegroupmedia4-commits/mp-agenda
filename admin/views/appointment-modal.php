@@ -9,8 +9,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$mp_technicians         = MP_Agenda_DB::get_technicians( true );
-$mp_intervention_types  = get_option( 'mp_agenda_intervention_types', array() );
+$mp_technicians = MP_Agenda_DB::get_technicians( true );
+$mp_services    = MP_Agenda_DB::get_services( true );
 
 $mp_duration_options = array(
 	30  => __( '30 min', 'mp-agenda' ),
@@ -34,7 +34,7 @@ $mp_duration_options = array(
 			<input type="hidden" id="mp-appt-id" name="id" value="" />
 
 			<div class="mp-agenda-field">
-				<label for="mp-appt-technician"><?php esc_html_e( 'Technicien', 'mp-agenda' ); ?> *</label>
+				<label for="mp-appt-technician"><?php esc_html_e( 'Commercial', 'mp-agenda' ); ?> *</label>
 				<select id="mp-appt-technician" name="technician_id" required>
 					<?php foreach ( $mp_technicians as $mp_tech ) : ?>
 						<option value="<?php echo esc_attr( $mp_tech['id'] ); ?>"><?php echo esc_html( $mp_tech['name'] ); ?></option>
@@ -90,10 +90,11 @@ $mp_duration_options = array(
 
 			<div class="mp-agenda-field-row">
 				<div class="mp-agenda-field">
-					<label for="mp-appt-type"><?php esc_html_e( 'Type d\'intervention', 'mp-agenda' ); ?></label>
-					<select id="mp-appt-type" name="intervention_type">
-						<?php foreach ( $mp_intervention_types as $mp_type ) : ?>
-							<option value="<?php echo esc_attr( $mp_type ); ?>"><?php echo esc_html( $mp_type ); ?></option>
+					<label for="mp-appt-service"><?php esc_html_e( 'Service', 'mp-agenda' ); ?></label>
+					<select id="mp-appt-service" name="service_id">
+						<option value=""><?php esc_html_e( 'Aucun', 'mp-agenda' ); ?></option>
+						<?php foreach ( $mp_services as $mp_service ) : ?>
+							<option value="<?php echo esc_attr( $mp_service['id'] ); ?>"><?php echo esc_html( $mp_service['name'] ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</div>

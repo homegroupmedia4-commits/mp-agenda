@@ -10,7 +10,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $mp_settings           = get_option( 'mp_agenda_settings', array() );
-$mp_intervention_types = get_option( 'mp_agenda_intervention_types', array() );
 $mp_gdpr_text          = get_option( 'mp_agenda_gdpr_text', '' );
 $mp_gdpr_retention     = get_option( 'mp_agenda_gdpr_retention_months', 24 );
 $mp_google_client_id   = get_option( 'mp_agenda_google_client_id', '' );
@@ -29,7 +28,6 @@ $mp_active_tab         = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 
 
 	<h2 class="nav-tab-wrapper">
 		<a href="?page=mp-agenda-settings&tab=general" class="nav-tab <?php echo 'general' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Général', 'mp-agenda' ); ?></a>
-		<a href="?page=mp-agenda-settings&tab=types" class="nav-tab <?php echo 'types' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Types d\'intervention', 'mp-agenda' ); ?></a>
 		<a href="?page=mp-agenda-settings&tab=google" class="nav-tab <?php echo 'google' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Google API', 'mp-agenda' ); ?></a>
 		<a href="?page=mp-agenda-settings&tab=notifications" class="nav-tab <?php echo 'notifications' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Notifications', 'mp-agenda' ); ?></a>
 		<a href="?page=mp-agenda-settings&tab=gdpr" class="nav-tab <?php echo 'gdpr' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'RGPD', 'mp-agenda' ); ?></a>
@@ -65,32 +63,9 @@ $mp_active_tab         = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 
 			<div class="mp-agenda-field">
 				<label class="mp-agenda-toggle">
 					<input type="checkbox" name="require_technician_choice" value="1" <?php checked( ! empty( $mp_settings['require_technician_choice'] ) ); ?> />
-					<span><?php esc_html_e( 'Rendre le choix du technicien obligatoire dans le formulaire client', 'mp-agenda' ); ?></span>
+					<span><?php esc_html_e( 'Rendre le choix du commercial obligatoire dans le formulaire client', 'mp-agenda' ); ?></span>
 				</label>
 			</div>
-
-			<div class="mp-agenda-form-actions">
-				<button type="submit" class="button button-primary"><?php esc_html_e( 'Enregistrer', 'mp-agenda' ); ?></button>
-			</div>
-		</form>
-
-	<?php elseif ( 'types' === $mp_active_tab ) : ?>
-		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form" id="mp-agenda-types-form">
-			<?php wp_nonce_field( 'mp_agenda_save_intervention_types' ); ?>
-			<input type="hidden" name="action" value="mp_agenda_save_intervention_types" />
-
-			<p class="description"><?php esc_html_e( 'Ces types apparaissent dans le formulaire client et dans la modal de rendez-vous.', 'mp-agenda' ); ?></p>
-
-			<div id="mp-agenda-types-list">
-				<?php foreach ( $mp_intervention_types as $mp_type ) : ?>
-					<div class="mp-agenda-type-row">
-						<input type="text" name="intervention_types[]" value="<?php echo esc_attr( $mp_type ); ?>" />
-						<button type="button" class="button mp-agenda-remove-type">&times;</button>
-					</div>
-				<?php endforeach; ?>
-			</div>
-
-			<button type="button" class="button" id="mp-agenda-add-type"><?php esc_html_e( '+ Ajouter un type', 'mp-agenda' ); ?></button>
 
 			<div class="mp-agenda-form-actions">
 				<button type="submit" class="button button-primary"><?php esc_html_e( 'Enregistrer', 'mp-agenda' ); ?></button>
@@ -150,7 +125,7 @@ $mp_active_tab         = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 
 			<div class="mp-agenda-field">
 				<label class="mp-agenda-toggle">
 					<input type="checkbox" name="notify_technician" value="1" <?php checked( ! empty( $mp_settings['notify_technician'] ) ); ?> />
-					<span><?php esc_html_e( 'Envoyer un email de notification au technicien', 'mp-agenda' ); ?></span>
+					<span><?php esc_html_e( 'Envoyer un email de notification au commercial', 'mp-agenda' ); ?></span>
 				</label>
 			</div>
 

@@ -57,6 +57,16 @@ class MP_Agenda_DB {
 		return $wpdb->prefix . 'mp_agenda_showrooms';
 	}
 
+	/**
+	 * Retourne le nom complet de la table des services.
+	 *
+	 * @return string
+	 */
+	public static function table_services() {
+		global $wpdb;
+		return $wpdb->prefix . 'mp_agenda_services';
+	}
+
 	/* ---------------------------------------------------------------------
 	 * TECHNICIENS
 	 * ------------------------------------------------------------------- */
@@ -172,8 +182,9 @@ class MP_Agenda_DB {
 	 */
 	public static function get_appointments( $args = array() ) {
 		global $wpdb;
-		$table = self::table_appointments();
-		$tech  = self::table_technicians();
+		$table    = self::table_appointments();
+		$tech     = self::table_technicians();
+		$services = self::table_services();
 
 		$defaults = array(
 			'from'          => '',
@@ -222,8 +233,9 @@ class MP_Agenda_DB {
 		$orderby         = in_array( $args['orderby'], $orderby_allowed, true ) ? $args['orderby'] : 'start_datetime';
 		$order           = 'DESC' === strtoupper( $args['order'] ) ? 'DESC' : 'ASC';
 
-		$sql = "SELECT a.*, t.name AS technician_name FROM {$table} a
+		$sql = "SELECT a.*, t.name AS technician_name, s.name AS service_name FROM {$table} a
 			LEFT JOIN {$tech} t ON t.id = a.technician_id
+			LEFT JOIN {$services} s ON s.id = a.service_id
 			WHERE " . implode( ' AND ', $where ) . "
 			ORDER BY a.{$orderby} {$order}";
 
@@ -303,10 +315,18 @@ class MP_Agenda_DB {
 	 */
 	public static function get_appointment( $id ) {
 		global $wpdb;
-		$table = self::table_appointments();
+		$table    = self::table_appointments();
+		$tech     = self::table_technicians();
+		$services = self::table_services();
 
 		return $wpdb->get_row(
-			$wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $id ) ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$wpdb->prepare(
+				"SELECT a.*, t.name AS technician_name, s.name AS service_name FROM {$table} a
+				LEFT JOIN {$tech} t ON t.id = a.technician_id
+				LEFT JOIN {$services} s ON s.id = a.service_id
+				WHERE a.id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				absint( $id )
+			),
 			ARRAY_A
 		);
 	}
@@ -610,5 +630,93 @@ class MP_Agenda_DB {
 
 		$wpdb->update( self::table_technicians(), array( 'showroom_id' => null ), array( 'showroom_id' => $id ) );
 		$wpdb->delete( self::table_showrooms(), array( 'id' => $id ) );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * SERVICES
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Récupère la liste des services.
+	 *
+	 * @param bool $active_only Ne retourner que les services actifs.
+	 * @return array
+	 */
+	public static function get_services( $active_only = false ) {
+		global $wpdb;
+		$table = self::table_services();
+
+		if ( $active_only ) {
+			$sql = $wpdb->prepare( "SELECT * FROM {$table} WHERE is_active = %d ORDER BY display_order ASC, name ASC", 1 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		} else {
+			$sql = "SELECT * FROM {$table} ORDER BY display_order ASC, name ASC"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+
+		return $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
+	 * Récupère un service par son ID.
+	 *
+	 * @param int $id ID du service.
+	 * @return array|null
+	 */
+	public static function get_service( $id ) {
+		global $wpdb;
+		$table = self::table_services();
+
+		return $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $id ) ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+	}
+
+	/**
+	 * Crée un service.
+	 *
+	 * @param array $data Données du service.
+	 * @return int ID du service créé.
+	 */
+	public static function create_service( $data ) {
+		global $wpdb;
+
+		$data['created_at'] = current_time( 'mysql' );
+		$data['updated_at'] = current_time( 'mysql' );
+
+		$wpdb->insert( self::table_services(), $data ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Met à jour un service existant.
+	 *
+	 * @param int   $id   ID du service.
+	 * @param array $data Données à mettre à jour.
+	 * @return int ID du service mis à jour.
+	 */
+	public static function update_service( $id, $data ) {
+		global $wpdb;
+
+		$data['updated_at'] = current_time( 'mysql' );
+
+		$wpdb->update( self::table_services(), $data, array( 'id' => absint( $id ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+
+		return absint( $id );
+	}
+
+	/**
+	 * Supprime un service. Les rendez-vous qui y étaient rattachés conservent
+	 * leur intervention_type d'origine (service_id repasse à NULL).
+	 *
+	 * @param int $id ID du service.
+	 * @return void
+	 */
+	public static function delete_service( $id ) {
+		global $wpdb;
+		$id = absint( $id );
+
+		$wpdb->update( self::table_appointments(), array( 'service_id' => null ), array( 'service_id' => $id ) );
+		$wpdb->delete( self::table_services(), array( 'id' => $id ) );
 	}
 }

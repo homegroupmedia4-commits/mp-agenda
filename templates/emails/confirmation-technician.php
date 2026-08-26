@@ -42,7 +42,7 @@ $company_name = $settings['company_name'] ?? get_bloginfo( 'name' );
 								<tr><td><strong>Date</strong></td><td><?php echo esc_html( $date->format( 'd/m/Y' ) ); ?></td></tr>
 								<tr><td><strong>Heure</strong></td><td><?php echo esc_html( $date->format( 'H:i' ) ); ?></td></tr>
 								<tr><td><strong>Adresse</strong></td><td><?php echo esc_html( $appointment['client_address'] ); ?></td></tr>
-								<tr><td><strong>Type d'intervention</strong></td><td><?php echo esc_html( $appointment['intervention_type'] ); ?></td></tr>
+								<tr><td><strong>Service</strong></td><td><?php echo esc_html( ! empty( $appointment['service_name'] ) ? $appointment['service_name'] : $appointment['intervention_type'] ); ?></td></tr>
 								<?php if ( ! empty( $appointment['surface'] ) ) : ?>
 								<tr><td><strong>Surface estimée</strong></td><td><?php echo esc_html( $appointment['surface'] ); ?></td></tr>
 								<?php endif; ?>

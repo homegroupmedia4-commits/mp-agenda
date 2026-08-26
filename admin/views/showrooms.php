@@ -106,7 +106,7 @@ $mp_editing     = $mp_editing_id ? MP_Agenda_DB::get_showroom( $mp_editing_id ) 
 
 					<div class="mp-agenda-technician-actions">
 						<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=mp-agenda-showrooms&edit=' . $mp_showroom['id'] ) ); ?>"><?php esc_html_e( 'Modifier', 'mp-agenda' ); ?></a>
-						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;" onsubmit="return confirm('<?php echo esc_js( __( 'Supprimer ce showroom ? Les techniciens qui y sont rattachés redeviendront disponibles pour tous les showrooms.', 'mp-agenda' ) ); ?>');">
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;" onsubmit="return confirm('<?php echo esc_js( __( 'Supprimer ce showroom ? Les commerciaux qui y sont rattachés redeviendront disponibles pour tous les showrooms.', 'mp-agenda' ) ); ?>');">
 							<?php wp_nonce_field( 'mp_agenda_delete_showroom' ); ?>
 							<input type="hidden" name="action" value="mp_agenda_delete_showroom" />
 							<input type="hidden" name="id" value="<?php echo esc_attr( $mp_showroom['id'] ); ?>" />

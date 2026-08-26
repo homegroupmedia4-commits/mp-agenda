@@ -56,7 +56,7 @@
 	}
 
 	/* ---------------------------------------------------------------------
-	 * Media picker (page Techniciens)
+	 * Media picker (page Commerciaux)
 	 * ------------------------------------------------------------------- */
 
 	function initMediaPicker() {
@@ -187,7 +187,7 @@
 			document.getElementById( 'mp-appt-client-phone' ).value = appointment.client_phone || '';
 			document.getElementById( 'mp-appt-client-email' ).value = appointment.client_email || '';
 			document.getElementById( 'mp-appt-client-address' ).value = appointment.client_address || '';
-			document.getElementById( 'mp-appt-type' ).value = appointment.intervention_type || '';
+			document.getElementById( 'mp-appt-service' ).value = appointment.service_id || '';
 			document.getElementById( 'mp-appt-surface' ).value = appointment.surface || '';
 			document.getElementById( 'mp-appt-notes' ).value = appointment.internal_notes || '';
 			document.getElementById( 'mp-appt-status' ).value = appointment.status || 'confirmed';
@@ -234,7 +234,7 @@
 				client_phone: document.getElementById( 'mp-appt-client-phone' ).value,
 				client_email: document.getElementById( 'mp-appt-client-email' ).value,
 				client_address: document.getElementById( 'mp-appt-client-address' ).value,
-				intervention_type: document.getElementById( 'mp-appt-type' ).value,
+				service_id: document.getElementById( 'mp-appt-service' ).value || null,
 				surface: document.getElementById( 'mp-appt-surface' ).value,
 				urgency: this.form.querySelector( 'input[name="urgency"]:checked' ).value,
 				internal_notes: document.getElementById( 'mp-appt-notes' ).value,
@@ -522,7 +522,7 @@
 					if ( event.isBlocked ) {
 						eventEl.innerHTML = '<strong>Indisponible</strong>' + ( event.reason || '' );
 					} else {
-						eventEl.innerHTML = '<strong>' + escapeHtml( event.client_name ) + '</strong>' + pad( start.getHours() ) + ':' + pad( start.getMinutes() ) + ' — ' + escapeHtml( event.intervention_type || '' );
+						eventEl.innerHTML = '<strong>' + escapeHtml( event.client_name ) + '</strong>' + pad( start.getHours() ) + ':' + pad( start.getMinutes() ) + ' — ' + escapeHtml( event.service_name || event.intervention_type || '' );
 						eventEl.addEventListener( 'click', function ( e ) {
 							e.stopPropagation();
 							Modal.openForEdit( event );

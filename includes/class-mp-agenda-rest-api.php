@@ -117,6 +117,16 @@ class MP_Agenda_REST_API {
 
 		register_rest_route(
 			$this->namespace,
+			'/services',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_services' ),
+				'permission_callback' => array( $this, 'public_permission_callback' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/technicians/(?P<id>\d+)',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -253,8 +263,9 @@ class MP_Agenda_REST_API {
 	 * @return array
 	 */
 	private function sanitize_appointment_input( WP_REST_Request $request ) {
-		$duration = absint( $request->get_param( 'duration' ) ) ?: 60;
-		$start    = sanitize_text_field( (string) $request->get_param( 'start_datetime' ) );
+		$duration    = absint( $request->get_param( 'duration' ) ) ?: 60;
+		$start       = sanitize_text_field( (string) $request->get_param( 'start_datetime' ) );
+		$service_id  = $request->get_param( 'service_id' );
 
 		$start_dt = new DateTime( $start );
 		$end_dt   = clone $start_dt;
@@ -267,6 +278,7 @@ class MP_Agenda_REST_API {
 			'client_phone'       => sanitize_text_field( (string) $request->get_param( 'client_phone' ) ),
 			'client_address'     => sanitize_textarea_field( (string) $request->get_param( 'client_address' ) ),
 			'intervention_type'  => sanitize_text_field( (string) $request->get_param( 'intervention_type' ) ),
+			'service_id'         => ( null !== $service_id && '' !== $service_id ) ? absint( $service_id ) : null,
 			'surface'            => sanitize_text_field( (string) $request->get_param( 'surface' ) ),
 			'urgency'            => in_array( $request->get_param( 'urgency' ), array( 'normal', 'urgent' ), true ) ? $request->get_param( 'urgency' ) : 'normal',
 			'notes'              => sanitize_textarea_field( (string) $request->get_param( 'notes' ) ),
@@ -545,6 +557,35 @@ class MP_Agenda_REST_API {
 	}
 
 	/**
+	 * Liste les services actifs (endpoint public, pour l'étape 2 du formulaire de réservation).
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_services() {
+		$services = MP_Agenda_DB::get_services( true );
+
+		$public_data = array_map( array( $this, 'format_public_service' ), $services );
+
+		return new WP_REST_Response( array( 'items' => $public_data ), 200 );
+	}
+
+	/**
+	 * Formate les données publiques d'un service.
+	 *
+	 * @param array $service Données brutes du service.
+	 * @return array
+	 */
+	private function format_public_service( $service ) {
+		return array(
+			'id'          => (int) $service['id'],
+			'name'        => $service['name'],
+			'description' => $service['description'],
+			'icon'        => $service['icon'],
+			'duration'    => (int) $service['duration'],
+		);
+	}
+
+	/**
 	 * Détail public d'un technicien.
 	 *
 	 * @param WP_REST_Request $request Requête REST.
@@ -697,7 +738,11 @@ class MP_Agenda_REST_API {
 		$technician_id = absint( $request->get_param( 'technician_id' ) );
 		$date          = sanitize_text_field( (string) $request->get_param( 'date' ) );
 		$time          = sanitize_text_field( (string) $request->get_param( 'time' ) );
-		$duration      = absint( $request->get_param( 'duration' ) ) ?: (int) ( get_option( 'mp_agenda_settings' )['default_duration'] ?? 60 );
+		$service_id    = absint( $request->get_param( 'service_id' ) );
+		$service       = $service_id ? MP_Agenda_DB::get_service( $service_id ) : null;
+		$duration      = absint( $request->get_param( 'duration' ) )
+			?: ( $service ? (int) $service['duration'] : 0 )
+			?: (int) ( get_option( 'mp_agenda_settings' )['default_duration'] ?? 60 );
 
 		$client_name    = sanitize_text_field( (string) $request->get_param( 'client_name' ) );
 		$client_phone   = sanitize_text_field( (string) $request->get_param( 'client_phone' ) );
@@ -743,6 +788,7 @@ class MP_Agenda_REST_API {
 			'client_phone'      => $client_phone,
 			'client_address'    => $client_address,
 			'intervention_type' => $intervention,
+			'service_id'        => $service ? $service_id : null,
 			'notes'             => $notes,
 			'start_datetime'    => $start_dt->format( 'Y-m-d H:i:s' ),
 			'end_datetime'      => $end_dt->format( 'Y-m-d H:i:s' ),
@@ -768,6 +814,7 @@ class MP_Agenda_REST_API {
 					'technician_name'   => $technician['name'],
 					'start_datetime'    => $appointment['start_datetime'],
 					'intervention_type' => $appointment['intervention_type'],
+					'service_name'      => $appointment['service_name'],
 				),
 			),
 			201

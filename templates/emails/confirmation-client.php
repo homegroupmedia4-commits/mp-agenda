@@ -35,11 +35,11 @@ $company_name = $settings['company_name'] ?? get_bloginfo( 'name' );
 							<p style="font-size:14px;line-height:1.6;">Votre rendez-vous a bien été enregistré avec les détails suivants :</p>
 
 							<table role="presentation" width="100%" cellpadding="8" cellspacing="0" style="background:#f8fafc;border-radius:8px;font-size:14px;">
-								<tr><td><strong>Technicien</strong></td><td><?php echo esc_html( $technician['name'] ?? '' ); ?></td></tr>
+								<tr><td><strong>Commercial</strong></td><td><?php echo esc_html( $technician['name'] ?? '' ); ?></td></tr>
 								<tr><td><strong>Date</strong></td><td><?php echo esc_html( $date->format( 'd/m/Y' ) ); ?></td></tr>
 								<tr><td><strong>Heure</strong></td><td><?php echo esc_html( $date->format( 'H:i' ) ); ?></td></tr>
 								<tr><td><strong>Adresse</strong></td><td><?php echo esc_html( $appointment['client_address'] ); ?></td></tr>
-								<tr><td><strong>Type d'intervention</strong></td><td><?php echo esc_html( $appointment['intervention_type'] ); ?></td></tr>
+								<tr><td><strong>Service</strong></td><td><?php echo esc_html( ! empty( $appointment['service_name'] ) ? $appointment['service_name'] : $appointment['intervention_type'] ); ?></td></tr>
 							</table>
 
 							<p style="font-size:13px;line-height:1.6;margin-top:24px;">

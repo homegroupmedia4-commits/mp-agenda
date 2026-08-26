@@ -39,7 +39,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 }
 ?>
 <div class="wrap mp-agenda-wrap">
-	<h1 class="mp-agenda-title"><?php esc_html_e( 'Techniciens', 'mp-agenda' ); ?></h1>
+	<h1 class="mp-agenda-title"><?php esc_html_e( 'Commerciaux', 'mp-agenda' ); ?></h1>
 
 	<?php if ( isset( $_GET['mp_agenda_notice'] ) ) : ?>
 		<div class="notice notice-success is-dismissible mp-agenda-notice">
@@ -49,7 +49,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 
 	<div class="mp-agenda-grid mp-agenda-grid-2">
 		<div class="mp-agenda-card">
-			<h2><?php echo $mp_editing ? esc_html__( 'Modifier le technicien', 'mp-agenda' ) : esc_html__( 'Ajouter un technicien', 'mp-agenda' ); ?></h2>
+			<h2><?php echo $mp_editing ? esc_html__( 'Modifier le commercial', 'mp-agenda' ) : esc_html__( 'Ajouter un commercial', 'mp-agenda' ); ?></h2>
 
 			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
 				<?php wp_nonce_field( 'mp_agenda_save_technician' ); ?>
@@ -98,7 +98,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 				<div class="mp-agenda-field">
 					<label class="mp-agenda-toggle">
 						<input type="checkbox" name="is_active" value="1" <?php checked( $mp_editing['is_active'] ?? 1, 1 ); ?> />
-						<span><?php esc_html_e( 'Technicien actif', 'mp-agenda' ); ?></span>
+						<span><?php esc_html_e( 'Commercial actif', 'mp-agenda' ); ?></span>
 					</label>
 				</div>
 
@@ -130,7 +130,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 
 		<div class="mp-agenda-card">
 			<div class="mp-agenda-card-header">
-				<h2><?php esc_html_e( 'Liste des techniciens', 'mp-agenda' ); ?></h2>
+				<h2><?php esc_html_e( 'Liste des commerciaux', 'mp-agenda' ); ?></h2>
 				<?php if ( $mp_has_connected_technician ) : ?>
 					<span>
 						<button type="button" class="button mp-agenda-sync-google-btn">🔄 <?php esc_html_e( 'Forcer la synchronisation Google', 'mp-agenda' ); ?></button>
@@ -180,7 +180,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 
 					<div class="mp-agenda-technician-actions">
 						<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=mp-agenda-technicians&edit=' . $mp_tech['id'] ) ); ?>"><?php esc_html_e( 'Modifier', 'mp-agenda' ); ?></a>
-						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;" onsubmit="return confirm('<?php echo esc_js( __( 'Supprimer ce technicien et tous ses rendez-vous ?', 'mp-agenda' ) ); ?>');">
+						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;" onsubmit="return confirm('<?php echo esc_js( __( 'Supprimer ce commercial et tous ses rendez-vous ?', 'mp-agenda' ) ); ?>');">
 							<?php wp_nonce_field( 'mp_agenda_delete_technician' ); ?>
 							<input type="hidden" name="action" value="mp_agenda_delete_technician" />
 							<input type="hidden" name="id" value="<?php echo esc_attr( $mp_tech['id'] ); ?>" />

@@ -26,6 +26,7 @@ class MP_Agenda_Activator {
 		self::create_tables();
 		self::seed_default_technicians();
 		self::seed_default_showrooms();
+		self::seed_default_services();
 		self::set_default_options();
 		self::schedule_cron();
 
@@ -45,6 +46,7 @@ class MP_Agenda_Activator {
 
 		self::create_tables();
 		self::seed_default_showrooms();
+		self::seed_default_services();
 
 		update_option( 'mp_agenda_db_version', MP_AGENDA_DB_VERSION );
 	}
@@ -138,14 +140,31 @@ class MP_Agenda_Activator {
 			PRIMARY KEY  (id)
 		) {$charset_collate};";
 
+		$table_services = $wpdb->prefix . 'mp_agenda_services';
+
+		$sql_services = "CREATE TABLE {$table_services} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			name VARCHAR(200) NOT NULL,
+			description TEXT DEFAULT NULL,
+			icon VARCHAR(100) DEFAULT NULL,
+			duration INT NOT NULL DEFAULT 60,
+			is_active TINYINT(1) NOT NULL DEFAULT 1,
+			display_order INT NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id)
+		) {$charset_collate};";
+
 		// Note : les FOREIGN KEY ne sont pas gérées par dbDelta, l'intégrité
 		// référentielle est donc assurée au niveau applicatif (class-mp-agenda-db.php).
 		dbDelta( $sql_technicians );
 		dbDelta( $sql_appointments );
 		dbDelta( $sql_blocked_slots );
 		dbDelta( $sql_showrooms );
+		dbDelta( $sql_services );
 
 		self::add_showroom_id_column();
+		self::add_service_id_column();
 	}
 
 	/**
@@ -162,6 +181,23 @@ class MP_Agenda_Activator {
 
 		if ( empty( $exists ) ) {
 			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN showroom_id BIGINT UNSIGNED DEFAULT NULL AFTER zone" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+	}
+
+	/**
+	 * Ajoute la colonne service_id à la table des rendez-vous si elle n'existe pas déjà
+	 * (conservée en plus de intervention_type pour la rétrocompatibilité).
+	 *
+	 * @return void
+	 */
+	private static function add_service_id_column() {
+		global $wpdb;
+
+		$table  = $wpdb->prefix . 'mp_agenda_appointments';
+		$exists = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM ' . $table . ' LIKE %s', 'service_id' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( empty( $exists ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN service_id BIGINT UNSIGNED DEFAULT NULL AFTER intervention_type" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		}
 	}
 
@@ -253,6 +289,65 @@ class MP_Agenda_Activator {
 
 		foreach ( $showrooms as $showroom ) {
 			$wpdb->insert( $table, $showroom ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+		}
+	}
+
+	/**
+	 * Crée les fiches des services par défaut si aucun service n'existe encore.
+	 *
+	 * @return void
+	 */
+	private static function seed_default_services() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'mp_agenda_services';
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		if ( $count > 0 ) {
+			return;
+		}
+
+		$services = array(
+			array(
+				'name'          => 'Ameublements/Dressings',
+				'duration'      => 60,
+				'is_active'     => 1,
+				'display_order' => 1,
+			),
+			array(
+				'name'          => 'Revêtements',
+				'duration'      => 60,
+				'is_active'     => 1,
+				'display_order' => 2,
+			),
+			array(
+				'name'          => 'Travaux de rénovation',
+				'duration'      => 60,
+				'is_active'     => 1,
+				'display_order' => 3,
+			),
+			array(
+				'name'          => 'Salle de bains',
+				'duration'      => 60,
+				'is_active'     => 1,
+				'display_order' => 4,
+			),
+			array(
+				'name'          => 'Cuisines',
+				'duration'      => 60,
+				'is_active'     => 1,
+				'display_order' => 5,
+			),
+			array(
+				'name'          => 'Electroménager',
+				'duration'      => 60,
+				'is_active'     => 1,
+				'display_order' => 6,
+			),
+		);
+
+		foreach ( $services as $service ) {
+			$wpdb->insert( $table, $service ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
 		}
 	}
 

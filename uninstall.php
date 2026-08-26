@@ -25,6 +25,7 @@ if ( ! $keep_data ) {
 		$wpdb->prefix . 'mp_agenda_blocked_slots',
 		$wpdb->prefix . 'mp_agenda_technicians',
 		$wpdb->prefix . 'mp_agenda_showrooms',
+		$wpdb->prefix . 'mp_agenda_services',
 	);
 
 	foreach ( $tables as $table ) {

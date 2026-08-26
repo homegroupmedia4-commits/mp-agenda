@@ -171,6 +171,7 @@ class MP_Agenda_Ajax {
 			'GET /blocked-slots'      => array( 'get_blocked_slots', 'admin' ),
 			'GET /technicians'        => array( 'get_technicians', 'public' ),
 			'GET /showrooms'          => array( 'get_showrooms', 'public' ),
+			'GET /services'           => array( 'get_services', 'public' ),
 			'GET /available-slots'    => array( 'get_available_slots', 'public' ),
 			'POST /book'              => array( 'book_appointment', 'public' ),
 			'POST /google/sync'       => array( 'force_google_sync', 'admin' ),

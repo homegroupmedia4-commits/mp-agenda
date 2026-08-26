@@ -3,33 +3,39 @@
 .mp-agenda-booking {
 	--mp-primary: #61CE70;
 	--mp-primary-dark: #4db85c;
+	--mp-primary-soft: #f0fdf4;
 	--mp-success: #16a34a;
 	--mp-danger: #dc2626;
 	--mp-text: #1e293b;
 	--mp-text-secondary: #64748b;
-	--mp-border: #e2e8f0;
+	--mp-border: #e5e7eb;
 	--mp-bg: #f8fafc;
-	font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+	--mp-sidebar-bg: #f8faf8;
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 	color: var(--mp-text);
-	max-width: 640px;
+	max-width: 980px;
 	margin: 0 auto;
 	box-sizing: border-box;
+	background: #fff;
+	border-radius: 16px;
+	box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+	overflow: hidden;
 }
 .mp-agenda-booking * {
 	box-sizing: border-box;
 }
 
-/* Étapes */
+/* Étapes (stepper horizontal en haut) */
 .mp-agenda-steps {
 	display: flex;
 	justify-content: space-between;
-	margin-bottom: 24px;
 	gap: 4px;
+	padding: 20px 24px 0;
 }
 .mp-agenda-step-indicator {
 	flex: 1;
 	text-align: center;
-	opacity: 0.45;
+	opacity: 0.4;
 	transition: opacity 0.2s;
 }
 .mp-agenda-step-indicator.active,
@@ -40,13 +46,13 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	width: 28px;
-	height: 28px;
+	width: 26px;
+	height: 26px;
 	border-radius: 50%;
 	background: var(--mp-border);
 	color: var(--mp-text);
 	font-weight: 700;
-	font-size: 13px;
+	font-size: 12px;
 	margin-bottom: 4px;
 }
 .mp-agenda-step-indicator.active .mp-agenda-step-number,
@@ -56,65 +62,183 @@
 }
 .mp-agenda-step-label {
 	display: block;
+	font-size: 10px;
+	color: var(--mp-text-secondary);
+}
+
+/* Structure en 3 colonnes : sidebar gauche / contenu / fiche récap */
+.mp-agenda-shell {
+	display: grid;
+	grid-template-columns: 250px 1fr 200px;
+	min-height: 480px;
+}
+
+/* Sidebar gauche */
+.mp-agenda-sidebar-left {
+	background: var(--mp-sidebar-bg);
+	border-right: 1px solid var(--mp-border);
+	padding: 28px 22px;
+	display: flex;
+	flex-direction: column;
+}
+.mp-agenda-sidebar-icon {
+	font-size: 34px;
+	line-height: 1;
+	margin-bottom: 14px;
+}
+.mp-agenda-sidebar-title {
+	font-size: 17px;
+	font-weight: 700;
+	margin: 0 0 8px;
+	color: var(--mp-text);
+}
+.mp-agenda-sidebar-desc {
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--mp-text-secondary);
+	margin: 0;
+}
+.mp-agenda-sidebar-phone {
+	margin-top: auto;
+	padding-top: 20px;
+	border-top: 1px solid var(--mp-border);
+}
+.mp-agenda-sidebar-phone-label {
+	display: block;
 	font-size: 11px;
 	color: var(--mp-text-secondary);
+	margin-bottom: 4px;
+}
+.mp-agenda-sidebar-phone-number {
+	display: block;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--mp-primary-dark);
+	text-decoration: none;
+}
+.mp-agenda-sidebar-phone-number:hover {
+	text-decoration: underline;
+}
+
+/* Contenu central */
+.mp-agenda-main {
+	padding: 28px 28px 24px;
+	min-width: 0;
+}
+
+/* Fiche récapitulative (sidebar droite) */
+.mp-agenda-sidebar-right {
+	border-left: 1px solid var(--mp-border);
+	padding: 24px 18px;
+	background: #fff;
+}
+.mp-agenda-fiche-title {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--mp-text-secondary);
+	margin: 0 0 14px;
+}
+.mp-agenda-fiche {
+	margin: 0;
+}
+.mp-agenda-fiche-row {
+	margin-bottom: 16px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--mp-border);
+}
+.mp-agenda-fiche-row:last-child {
+	border-bottom: none;
+}
+.mp-agenda-fiche-row dt {
+	font-size: 10px;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--mp-text-secondary);
+	margin-bottom: 3px;
+}
+.mp-agenda-fiche-row dd {
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--mp-text);
 }
 
 /* Panels avec transition douce */
 .mp-agenda-panel {
 	display: none;
-	animation: mp-agenda-fade 0.25s ease;
+	opacity: 0;
+	transform: translateY(8px);
 }
 .mp-agenda-panel.is-active {
 	display: block;
+	animation: mp-agenda-fade 0.28s ease forwards;
 }
 @keyframes mp-agenda-fade {
-	from { opacity: 0; transform: translateY(6px); }
+	from { opacity: 0; transform: translateY(8px); }
 	to { opacity: 1; transform: translateY(0); }
 }
 
 .mp-agenda-panel h3 {
-	font-size: 18px;
-	margin: 0 0 16px;
+	font-size: 19px;
+	margin: 0 0 18px;
 }
 
-/* Cards techniciens */
+/* Cards partagées : showrooms / services / commerciaux */
+.mp-agenda-showroom-cards,
+.mp-agenda-service-cards,
 .mp-agenda-technician-cards {
 	display: grid;
 	grid-template-columns: 1fr;
 	gap: 12px;
 }
-@media (min-width: 480px) {
+@media (min-width: 560px) {
+	.mp-agenda-showroom-cards,
+	.mp-agenda-service-cards,
 	.mp-agenda-technician-cards {
 		grid-template-columns: repeat(2, 1fr);
 	}
 }
+
+.mp-agenda-showroom-card,
+.mp-agenda-service-card,
 .mp-agenda-technician-card {
-	border: 2px solid var(--mp-border);
+	border: 1px solid var(--mp-border);
 	border-radius: 12px;
 	padding: 16px;
 	text-align: center;
 	cursor: pointer;
 	background: #fff;
-	transition: border-color 0.15s, box-shadow 0.15s;
+	transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
+.mp-agenda-showroom-card:hover,
+.mp-agenda-service-card:hover,
 .mp-agenda-technician-card:hover {
-	box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-.mp-agenda-technician-card.is-selected {
 	border-color: var(--mp-primary);
-	background: #eff6ff;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
 }
+.mp-agenda-showroom-card.is-selected,
+.mp-agenda-service-card.is-selected,
+.mp-agenda-technician-card.is-selected {
+	border: 2px solid var(--mp-primary);
+	background: var(--mp-primary-soft);
+	padding: 15px;
+}
+
+.mp-agenda-showroom-card img,
 .mp-agenda-technician-card img {
-	width: 64px;
-	height: 64px;
+	width: 60px;
+	height: 60px;
 	border-radius: 50%;
 	object-fit: cover;
-	margin-bottom: 8px;
+	margin: 0 auto 8px;
+	display: block;
 }
+.mp-agenda-showroom-photo-placeholder,
 .mp-agenda-technician-avatar-placeholder {
-	width: 64px;
-	height: 64px;
+	width: 60px;
+	height: 60px;
 	border-radius: 50%;
 	background: var(--mp-primary);
 	color: #fff;
@@ -122,95 +246,58 @@
 	align-items: center;
 	justify-content: center;
 	font-weight: 700;
-	font-size: 22px;
+	font-size: 20px;
 	margin: 0 auto 8px;
 }
+.mp-agenda-service-icon {
+	font-size: 30px;
+	line-height: 1;
+	margin-bottom: 8px;
+}
+
+.mp-agenda-showroom-card strong,
+.mp-agenda-service-card strong,
 .mp-agenda-technician-card strong {
 	display: block;
 	margin-bottom: 2px;
+	font-size: 14px;
 }
+.mp-agenda-showroom-card span,
+.mp-agenda-service-card span,
 .mp-agenda-technician-card span {
-	font-size: 12px;
-	color: var(--mp-text-secondary);
-}
-
-/* Cards showrooms */
-.mp-agenda-showroom-cards {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: 12px;
-}
-@media (min-width: 480px) {
-	.mp-agenda-showroom-cards {
-		grid-template-columns: repeat(2, 1fr);
-	}
-}
-.mp-agenda-showroom-card {
-	border: 2px solid var(--mp-border);
-	border-radius: 12px;
-	padding: 16px;
-	text-align: center;
-	cursor: pointer;
-	background: #fff;
-	transition: border-color 0.15s, box-shadow 0.15s;
-}
-.mp-agenda-showroom-card:hover {
-	box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-.mp-agenda-showroom-card.is-selected {
-	border-color: var(--mp-primary);
-	background: #eff6ff;
-}
-.mp-agenda-showroom-card img {
-	width: 64px;
-	height: 64px;
-	border-radius: 50%;
-	object-fit: cover;
-	margin-bottom: 8px;
-}
-.mp-agenda-showroom-photo-placeholder {
-	width: 64px;
-	height: 64px;
-	border-radius: 50%;
-	background: var(--mp-primary);
-	color: #fff;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	font-weight: 700;
-	font-size: 22px;
-	margin: 0 auto 8px;
-}
-.mp-agenda-showroom-card strong {
 	display: block;
-	margin-bottom: 2px;
-}
-.mp-agenda-showroom-card span {
 	font-size: 12px;
 	color: var(--mp-text-secondary);
+	line-height: 1.4;
 }
 
 /* Mini calendrier */
 .mp-agenda-mini-calendar {
 	border: 1px solid var(--mp-border);
 	border-radius: 12px;
-	padding: 12px;
-	margin-bottom: 16px;
+	padding: 14px;
+	margin-bottom: 18px;
 }
 .mp-agenda-mini-cal-header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 	margin-bottom: 10px;
-	font-weight: 600;
+	font-weight: 700;
+	font-size: 14px;
 }
 .mp-agenda-cal-nav {
-	background: var(--mp-bg);
+	background: #fff;
 	border: 1px solid var(--mp-border);
-	border-radius: 6px;
-	width: 32px;
-	height: 32px;
+	border-radius: 8px;
+	width: 30px;
+	height: 30px;
 	cursor: pointer;
+	color: var(--mp-text);
+	transition: border-color 0.15s;
+}
+.mp-agenda-cal-nav:hover {
+	border-color: var(--mp-primary);
 }
 .mp-agenda-mini-cal-weekdays,
 .mp-agenda-mini-cal-days {
@@ -225,11 +312,15 @@
 	padding: 4px 0;
 }
 .mp-agenda-cal-day {
-	padding: 8px 0;
+	padding: 9px 0;
 	border-radius: 8px;
 	font-size: 13px;
 	cursor: pointer;
-	background: var(--mp-bg);
+	background: transparent;
+	transition: background 0.15s, color 0.15s;
+}
+.mp-agenda-cal-day:not(.is-disabled):not(.is-selected):hover {
+	background: var(--mp-primary-soft);
 }
 .mp-agenda-cal-day.is-disabled {
 	color: #cbd5e1;
@@ -245,13 +336,15 @@
 	font-weight: 700;
 }
 .mp-agenda-cal-day.is-today:not(.is-selected) {
-	border: 1px solid var(--mp-primary);
+	box-shadow: inset 0 0 0 1px var(--mp-primary);
+	font-weight: 700;
 }
 
-/* Créneaux */
+/* Créneaux — boutons pilules */
 .mp-agenda-slots-wrap h4 {
 	font-size: 14px;
 	margin: 0 0 10px;
+	text-transform: capitalize;
 }
 .mp-agenda-slots {
 	display: flex;
@@ -261,10 +354,15 @@
 .mp-agenda-slot-btn {
 	border: 1px solid var(--mp-border);
 	background: #fff;
-	border-radius: 8px;
-	padding: 8px 14px;
+	border-radius: 999px;
+	padding: 9px 18px;
 	font-size: 13px;
+	font-weight: 600;
 	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.mp-agenda-slot-btn:hover {
+	border-color: var(--mp-primary);
 }
 .mp-agenda-slot-btn.is-selected {
 	background: var(--mp-primary);
@@ -297,6 +395,13 @@
 	padding: 10px 12px;
 	font-size: 15px;
 	font-family: inherit;
+	transition: border-color 0.15s;
+}
+.mp-agenda-field input:focus,
+.mp-agenda-field select:focus,
+.mp-agenda-field textarea:focus {
+	outline: none;
+	border-color: var(--mp-primary);
 }
 .mp-agenda-field-row {
 	display: flex;
@@ -348,15 +453,19 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	margin-top: 20px;
+	margin-top: 22px;
 }
 .mp-agenda-btn {
 	border: none;
 	border-radius: 8px;
-	padding: 12px 22px;
+	padding: 12px 24px;
 	font-size: 14px;
 	font-weight: 600;
 	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.mp-agenda-btn:active {
+	transform: scale(0.98);
 }
 .mp-agenda-btn-primary {
 	background: var(--mp-primary);
@@ -369,6 +478,9 @@
 	background: #fff;
 	border: 1px solid var(--mp-border);
 	color: var(--mp-text);
+}
+.mp-agenda-btn-secondary:hover {
+	border-color: var(--mp-text-secondary);
 }
 
 .mp-agenda-form-error {
@@ -384,7 +496,7 @@
 /* Succès */
 .mp-agenda-success-panel {
 	text-align: center;
-	padding: 30px 10px;
+	padding: 40px 10px;
 }
 .mp-agenda-success-icon {
 	width: 60px;
@@ -397,4 +509,48 @@
 	align-items: center;
 	justify-content: center;
 	margin: 0 auto 16px;
+}
+
+/* Responsive */
+@media (max-width: 767px) {
+	.mp-agenda-booking {
+		max-width: 100%;
+		border-radius: 12px;
+	}
+	.mp-agenda-shell {
+		grid-template-columns: 1fr;
+		min-height: 0;
+	}
+	.mp-agenda-sidebar-left {
+		border-right: none;
+		border-bottom: 1px solid var(--mp-border);
+		flex-direction: row;
+		align-items: center;
+		gap: 14px;
+		padding: 16px 20px;
+	}
+	.mp-agenda-sidebar-icon {
+		font-size: 26px;
+		margin-bottom: 0;
+	}
+	.mp-agenda-sidebar-title {
+		font-size: 15px;
+		margin-bottom: 2px;
+	}
+	.mp-agenda-sidebar-desc,
+	.mp-agenda-sidebar-phone {
+		display: none;
+	}
+	.mp-agenda-main {
+		padding: 20px 18px;
+	}
+	.mp-agenda-sidebar-right {
+		display: none;
+	}
+	.mp-agenda-steps {
+		padding: 16px 16px 0;
+	}
+	.mp-agenda-step-label {
+		display: none;
+	}
 }
