@@ -1,6 +1,6 @@
 <?php
 /**
- * Vue front-end : formulaire de prise de rendez-vous en 4 étapes.
+ * Vue front-end : formulaire de prise de rendez-vous en 5 étapes.
  *
  * @package MP_Agenda
  */
@@ -17,28 +17,32 @@ $mp_default_technician = isset( $atts['default_technician'] ) ? absint( $atts['d
 	<div class="mp-agenda-steps">
 		<div class="mp-agenda-step-indicator active" data-step="1">
 			<span class="mp-agenda-step-number">1</span>
-			<span class="mp-agenda-step-label"><?php esc_html_e( 'Technicien', 'mp-agenda' ); ?></span>
+			<span class="mp-agenda-step-label"><?php esc_html_e( 'Showroom', 'mp-agenda' ); ?></span>
 		</div>
 		<div class="mp-agenda-step-indicator" data-step="2">
 			<span class="mp-agenda-step-number">2</span>
-			<span class="mp-agenda-step-label"><?php esc_html_e( 'Date & heure', 'mp-agenda' ); ?></span>
+			<span class="mp-agenda-step-label"><?php esc_html_e( 'Technicien', 'mp-agenda' ); ?></span>
 		</div>
 		<div class="mp-agenda-step-indicator" data-step="3">
 			<span class="mp-agenda-step-number">3</span>
-			<span class="mp-agenda-step-label"><?php esc_html_e( 'Vos informations', 'mp-agenda' ); ?></span>
+			<span class="mp-agenda-step-label"><?php esc_html_e( 'Date & heure', 'mp-agenda' ); ?></span>
 		</div>
 		<div class="mp-agenda-step-indicator" data-step="4">
 			<span class="mp-agenda-step-number">4</span>
+			<span class="mp-agenda-step-label"><?php esc_html_e( 'Vos informations', 'mp-agenda' ); ?></span>
+		</div>
+		<div class="mp-agenda-step-indicator" data-step="5">
+			<span class="mp-agenda-step-number">5</span>
 			<span class="mp-agenda-step-label"><?php esc_html_e( 'Confirmation', 'mp-agenda' ); ?></span>
 		</div>
 	</div>
 
 	<form id="mp-agenda-booking-form" novalidate>
 
-		<!-- Étape 1 : Technicien -->
+		<!-- Étape 1 : Showroom -->
 		<section class="mp-agenda-panel is-active" data-step-panel="1">
-			<h3><?php esc_html_e( 'Choisissez votre technicien', 'mp-agenda' ); ?></h3>
-			<div class="mp-agenda-technician-cards" id="mp-agenda-technician-cards">
+			<h3><?php esc_html_e( 'Choisissez votre showroom', 'mp-agenda' ); ?></h3>
+			<div class="mp-agenda-showroom-cards" id="mp-agenda-showroom-cards">
 				<div class="mp-agenda-loading"><?php esc_html_e( 'Chargement…', 'mp-agenda' ); ?></div>
 			</div>
 			<div class="mp-agenda-panel-actions">
@@ -47,8 +51,20 @@ $mp_default_technician = isset( $atts['default_technician'] ) ? absint( $atts['d
 			</div>
 		</section>
 
-		<!-- Étape 2 : Date & créneau -->
+		<!-- Étape 2 : Technicien -->
 		<section class="mp-agenda-panel" data-step-panel="2">
+			<h3><?php esc_html_e( 'Choisissez votre technicien', 'mp-agenda' ); ?></h3>
+			<div class="mp-agenda-technician-cards" id="mp-agenda-technician-cards">
+				<div class="mp-agenda-loading"><?php esc_html_e( 'Chargement…', 'mp-agenda' ); ?></div>
+			</div>
+			<div class="mp-agenda-panel-actions">
+				<button type="button" class="mp-agenda-btn mp-agenda-btn-secondary" data-prev="1"><?php esc_html_e( 'Retour', 'mp-agenda' ); ?></button>
+				<button type="button" class="mp-agenda-btn mp-agenda-btn-primary" data-next="3"><?php esc_html_e( 'Continuer', 'mp-agenda' ); ?></button>
+			</div>
+		</section>
+
+		<!-- Étape 3 : Date & créneau -->
+		<section class="mp-agenda-panel" data-step-panel="3">
 			<h3><?php esc_html_e( 'Choisissez une date et un créneau', 'mp-agenda' ); ?></h3>
 
 			<div class="mp-agenda-mini-calendar">
@@ -71,13 +87,13 @@ $mp_default_technician = isset( $atts['default_technician'] ) ? absint( $atts['d
 			<input type="hidden" id="mp-agenda-selected-time" name="time" />
 
 			<div class="mp-agenda-panel-actions">
-				<button type="button" class="mp-agenda-btn mp-agenda-btn-secondary" data-prev="1"><?php esc_html_e( 'Retour', 'mp-agenda' ); ?></button>
-				<button type="button" class="mp-agenda-btn mp-agenda-btn-primary" data-next="3"><?php esc_html_e( 'Continuer', 'mp-agenda' ); ?></button>
+				<button type="button" class="mp-agenda-btn mp-agenda-btn-secondary" data-prev="2"><?php esc_html_e( 'Retour', 'mp-agenda' ); ?></button>
+				<button type="button" class="mp-agenda-btn mp-agenda-btn-primary" data-next="4"><?php esc_html_e( 'Continuer', 'mp-agenda' ); ?></button>
 			</div>
 		</section>
 
-		<!-- Étape 3 : Informations client -->
-		<section class="mp-agenda-panel" data-step-panel="3">
+		<!-- Étape 4 : Informations client -->
+		<section class="mp-agenda-panel" data-step-panel="4">
 			<h3><?php esc_html_e( 'Vos informations', 'mp-agenda' ); ?></h3>
 
 			<div class="mp-agenda-field">
@@ -124,24 +140,24 @@ $mp_default_technician = isset( $atts['default_technician'] ) ? absint( $atts['d
 				<p class="mp-agenda-gdpr-text"><?php echo wp_kses_post( get_option( 'mp_agenda_gdpr_text', '' ) ); ?></p>
 			</div>
 
-			<div class="mp-agenda-form-error" id="mp-agenda-step3-error" hidden></div>
-
-			<div class="mp-agenda-panel-actions">
-				<button type="button" class="mp-agenda-btn mp-agenda-btn-secondary" data-prev="2"><?php esc_html_e( 'Retour', 'mp-agenda' ); ?></button>
-				<button type="button" class="mp-agenda-btn mp-agenda-btn-primary" id="mp-agenda-to-recap"><?php esc_html_e( 'Continuer', 'mp-agenda' ); ?></button>
-			</div>
-		</section>
-
-		<!-- Étape 4 : Récapitulatif & confirmation -->
-		<section class="mp-agenda-panel" data-step-panel="4">
-			<h3><?php esc_html_e( 'Récapitulatif de votre rendez-vous', 'mp-agenda' ); ?></h3>
-
-			<div class="mp-agenda-recap" id="mp-agenda-recap"></div>
-
 			<div class="mp-agenda-form-error" id="mp-agenda-step4-error" hidden></div>
 
 			<div class="mp-agenda-panel-actions">
 				<button type="button" class="mp-agenda-btn mp-agenda-btn-secondary" data-prev="3"><?php esc_html_e( 'Retour', 'mp-agenda' ); ?></button>
+				<button type="button" class="mp-agenda-btn mp-agenda-btn-primary" id="mp-agenda-to-recap"><?php esc_html_e( 'Continuer', 'mp-agenda' ); ?></button>
+			</div>
+		</section>
+
+		<!-- Étape 5 : Récapitulatif & confirmation -->
+		<section class="mp-agenda-panel" data-step-panel="5">
+			<h3><?php esc_html_e( 'Récapitulatif de votre rendez-vous', 'mp-agenda' ); ?></h3>
+
+			<div class="mp-agenda-recap" id="mp-agenda-recap"></div>
+
+			<div class="mp-agenda-form-error" id="mp-agenda-step5-error" hidden></div>
+
+			<div class="mp-agenda-panel-actions">
+				<button type="button" class="mp-agenda-btn mp-agenda-btn-secondary" data-prev="4"><?php esc_html_e( 'Retour', 'mp-agenda' ); ?></button>
 				<button type="submit" class="mp-agenda-btn mp-agenda-btn-primary" id="mp-agenda-submit"><?php esc_html_e( 'Confirmer mon rendez-vous', 'mp-agenda' ); ?></button>
 			</div>
 		</section>

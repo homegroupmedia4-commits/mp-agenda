@@ -195,6 +195,23 @@
 	font-size: 13px;
 }
 
+/* Showrooms */
+.mp-agenda-showroom-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 16px 0;
+	border-bottom: 1px solid var(--mp-border);
+	flex-wrap: wrap;
+}
+.mp-agenda-showroom-info {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 200px;
+}
+
 /* Badges */
 .mp-agenda-badge {
 	display: inline-block;

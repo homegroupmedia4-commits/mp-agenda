@@ -80,6 +80,7 @@ class MP_Agenda {
 	 */
 	public function run() {
 		add_action( 'init', array( $this, 'load_textdomain' ) );
+		add_action( 'admin_init', array( 'MP_Agenda_Activator', 'maybe_upgrade' ) );
 		add_filter( 'cron_schedules', array( $this, 'add_cron_interval' ) ); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
 
 		$this->admin->init();

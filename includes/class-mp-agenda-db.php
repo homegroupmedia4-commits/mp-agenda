@@ -47,6 +47,16 @@ class MP_Agenda_DB {
 		return $wpdb->prefix . 'mp_agenda_blocked_slots';
 	}
 
+	/**
+	 * Retourne le nom complet de la table des showrooms.
+	 *
+	 * @return string
+	 */
+	public static function table_showrooms() {
+		global $wpdb;
+		return $wpdb->prefix . 'mp_agenda_showrooms';
+	}
+
 	/* ---------------------------------------------------------------------
 	 * TECHNICIENS
 	 * ------------------------------------------------------------------- */
@@ -68,6 +78,31 @@ class MP_Agenda_DB {
 		}
 
 		return $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
+	 * Récupère les techniciens associés à un showroom donné, en incluant ceux
+	 * sans showroom_id (NULL = rattaché à tous les showrooms).
+	 *
+	 * @param int  $showroom_id ID du showroom.
+	 * @param bool $active_only Ne retourner que les techniciens actifs.
+	 * @return array
+	 */
+	public static function get_technicians_by_showroom( $showroom_id, $active_only = true ) {
+		global $wpdb;
+		$table = self::table_technicians();
+
+		$where  = array( '(showroom_id = %d OR showroom_id IS NULL)' );
+		$params = array( absint( $showroom_id ) );
+
+		if ( $active_only ) {
+			$where[]  = 'is_active = %d';
+			$params[] = 1;
+		}
+
+		$sql = "SELECT * FROM {$table} WHERE " . implode( ' AND ', $where ) . ' ORDER BY name ASC'; // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 
 	/**
@@ -487,5 +522,93 @@ class MP_Agenda_DB {
 	public static function delete_blocked_slot_by_google_id( $google_event_id ) {
 		global $wpdb;
 		$wpdb->delete( self::table_blocked_slots(), array( 'google_event_id' => sanitize_text_field( $google_event_id ) ) );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * SHOWROOMS
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Récupère la liste des showrooms.
+	 *
+	 * @param bool $active_only Ne retourner que les showrooms actifs.
+	 * @return array
+	 */
+	public static function get_showrooms( $active_only = false ) {
+		global $wpdb;
+		$table = self::table_showrooms();
+
+		if ( $active_only ) {
+			$sql = $wpdb->prepare( "SELECT * FROM {$table} WHERE is_active = %d ORDER BY display_order ASC, name ASC", 1 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		} else {
+			$sql = "SELECT * FROM {$table} ORDER BY display_order ASC, name ASC"; // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+
+		return $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
+	 * Récupère un showroom par son ID.
+	 *
+	 * @param int $id ID du showroom.
+	 * @return array|null
+	 */
+	public static function get_showroom( $id ) {
+		global $wpdb;
+		$table = self::table_showrooms();
+
+		return $wpdb->get_row(
+			$wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", absint( $id ) ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			ARRAY_A
+		);
+	}
+
+	/**
+	 * Crée un showroom.
+	 *
+	 * @param array $data Données du showroom.
+	 * @return int ID du showroom créé.
+	 */
+	public static function create_showroom( $data ) {
+		global $wpdb;
+
+		$data['created_at'] = current_time( 'mysql' );
+		$data['updated_at'] = current_time( 'mysql' );
+
+		$wpdb->insert( self::table_showrooms(), $data ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+
+		return (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Met à jour un showroom existant.
+	 *
+	 * @param int   $id   ID du showroom.
+	 * @param array $data Données à mettre à jour.
+	 * @return int ID du showroom mis à jour.
+	 */
+	public static function update_showroom( $id, $data ) {
+		global $wpdb;
+
+		$data['updated_at'] = current_time( 'mysql' );
+
+		$wpdb->update( self::table_showrooms(), $data, array( 'id' => absint( $id ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+
+		return absint( $id );
+	}
+
+	/**
+	 * Supprime un showroom. Les techniciens qui y étaient rattachés repassent
+	 * automatiquement à "tous les showrooms" (showroom_id = NULL).
+	 *
+	 * @param int $id ID du showroom.
+	 * @return void
+	 */
+	public static function delete_showroom( $id ) {
+		global $wpdb;
+		$id = absint( $id );
+
+		$wpdb->update( self::table_technicians(), array( 'showroom_id' => null ), array( 'showroom_id' => $id ) );
+		$wpdb->delete( self::table_showrooms(), array( 'id' => $id ) );
 	}
 }

@@ -18,6 +18,8 @@
 	function MPAgendaBooking( root ) {
 		this.root = root;
 		this.form = root.querySelector( '#mp-agenda-booking-form' );
+		this.showrooms = [];
+		this.selectedShowroomId = 0; // 0 = aucun showroom sélectionné (pas de filtre).
 		this.technicians = [];
 		this.selectedTechnicianId = 0; // 0 = "peu importe".
 		this.currentMonth = new Date();
@@ -31,6 +33,7 @@
 		this.bindNavigation();
 		this.bindCalendarNav();
 		this.bindSubmit();
+		this.loadShowrooms();
 		this.loadTechnicians();
 	};
 
@@ -96,9 +99,9 @@
 		var toRecapBtn = this.root.querySelector( '#mp-agenda-to-recap' );
 		if ( toRecapBtn ) {
 			toRecapBtn.addEventListener( 'click', function () {
-				if ( self.validateStep3() ) {
+				if ( self.validateInfoStep() ) {
 					self.renderRecap();
-					self.goToStep( '4' );
+					self.goToStep( '5' );
 				}
 			} );
 		}
@@ -120,18 +123,86 @@
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 1 : Technicien
+	 * Étape 1 : Showroom
+	 * ------------------------------------------------------------------ */
+
+	MPAgendaBooking.prototype.loadShowrooms = function () {
+		var self = this;
+		this.apiGet( '/showrooms' )
+			.then( function ( data ) {
+				self.showrooms = data.items || [];
+				self.renderShowroomCards();
+			} )
+			.catch( function () {
+				document.getElementById( 'mp-agenda-showroom-cards' ).innerHTML = '<div class="mp-agenda-empty">' + cfg.i18n.genericError + '</div>';
+			} );
+	};
+
+	MPAgendaBooking.prototype.renderShowroomCards = function () {
+		var self = this;
+		var container = document.getElementById( 'mp-agenda-showroom-cards' );
+		container.innerHTML = '';
+
+		if ( ! this.showrooms.length ) {
+			container.innerHTML = '<div class="mp-agenda-empty">' + cfg.i18n.noShowrooms + '</div>';
+			return;
+		}
+
+		this.showrooms.forEach( function ( showroom ) {
+			var card = document.createElement( 'div' );
+			card.className = 'mp-agenda-showroom-card';
+			card.dataset.showroomId = showroom.id;
+
+			var media = showroom.photo_url
+				? '<img src="' + showroom.photo_url + '" alt="" />'
+				: '<div class="mp-agenda-showroom-photo-placeholder">' + escapeHtml( showroom.name.charAt( 0 ) ) + '</div>';
+
+			card.innerHTML = media + '<strong>' + escapeHtml( showroom.name ) + '</strong>' + ( showroom.address ? '<span>' + escapeHtml( showroom.address ) + '</span>' : '' );
+
+			card.addEventListener( 'click', function () {
+				self.selectShowroom( showroom.id, card );
+			} );
+
+			container.appendChild( card );
+		} );
+	};
+
+	MPAgendaBooking.prototype.selectShowroom = function ( id, cardEl ) {
+		this.selectedShowroomId = parseInt( id, 10 );
+		this.root.querySelectorAll( '.mp-agenda-showroom-card' ).forEach( function ( c ) {
+			c.classList.remove( 'is-selected' );
+		} );
+		cardEl.classList.add( 'is-selected' );
+
+		// Le showroom détermine les techniciens disponibles : on réinitialise la suite.
+		this.selectedTechnicianId = 0;
+		this.selectedDate = null;
+		this.selectedTime = null;
+		this.root.querySelectorAll( '.mp-agenda-technician-card' ).forEach( function ( c ) {
+			c.classList.remove( 'is-selected' );
+		} );
+
+		this.loadTechnicians();
+	};
+
+	/* --------------------------------------------------------------------
+	 * Étape 2 : Technicien
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.loadTechnicians = function () {
 		var self = this;
-		this.apiGet( '/technicians' )
+		var container = document.getElementById( 'mp-agenda-technician-cards' );
+		container.innerHTML = '<div class="mp-agenda-loading">' + cfg.i18n.loading + '</div>';
+
+		var path = '/technicians' + ( this.selectedShowroomId ? '?showroom_id=' + this.selectedShowroomId : '' );
+
+		this.apiGet( path )
 			.then( function ( data ) {
 				self.technicians = data.items || [];
 				self.renderTechnicianCards();
 			} )
 			.catch( function () {
-				document.getElementById( 'mp-agenda-technician-cards' ).innerHTML = '<div class="mp-agenda-empty">' + cfg.i18n.genericError + '</div>';
+				container.innerHTML = '<div class="mp-agenda-empty">' + cfg.i18n.genericError + '</div>';
 			} );
 	};
 
@@ -183,7 +254,7 @@
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 2 : Mini-calendrier & créneaux
+	 * Étape 3 : Mini-calendrier & créneaux
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.bindCalendarNav = function () {
@@ -197,8 +268,8 @@
 			self.renderCalendar();
 		} );
 
-		// Rend le calendrier au premier passage à l'étape 2.
-		this.root.querySelectorAll( '[data-next="2"]' ).forEach( function ( btn ) {
+		// Rend le calendrier au premier passage à l'étape 3 (Date & heure).
+		this.root.querySelectorAll( '[data-next="3"]' ).forEach( function ( btn ) {
 			btn.addEventListener( 'click', function () {
 				self.renderCalendar();
 			} );
@@ -366,17 +437,17 @@
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 3 : validation
+	 * Étape 4 : validation
 	 * ------------------------------------------------------------------ */
 
-	MPAgendaBooking.prototype.validateStep3 = function () {
-		var errorEl = document.getElementById( 'mp-agenda-step3-error' );
+	MPAgendaBooking.prototype.validateInfoStep = function () {
+		var errorEl = document.getElementById( 'mp-agenda-step4-error' );
 		errorEl.hidden = true;
 
 		if ( ! this.selectedDate || ! this.selectedTime ) {
 			errorEl.textContent = cfg.i18n.selectSlot;
 			errorEl.hidden = false;
-			this.goToStep( '2' );
+			this.goToStep( '3' );
 			return false;
 		}
 
@@ -401,7 +472,7 @@
 	};
 
 	/* --------------------------------------------------------------------
-	 * Étape 4 : récapitulatif & envoi
+	 * Étape 5 : récapitulatif & envoi
 	 * ------------------------------------------------------------------ */
 
 	MPAgendaBooking.prototype.renderRecap = function () {
@@ -409,6 +480,10 @@
 		var tech = this.technicians.filter( function ( t ) {
 			return parseInt( t.id, 10 ) === parseInt( techId, 10 );
 		} )[ 0 ];
+
+		var showroom = this.showrooms.filter( function ( s ) {
+			return parseInt( s.id, 10 ) === parseInt( this.selectedShowroomId, 10 );
+		}, this )[ 0 ];
 
 		var date = new Date( this.selectedDate + 'T00:00:00' );
 		var dateLabel = date.toLocaleDateString( 'fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } );
@@ -420,6 +495,7 @@
 
 		document.getElementById( 'mp-agenda-recap' ).innerHTML =
 			'<dl>' +
+			( showroom ? '<dt>Showroom</dt><dd>' + escapeHtml( showroom.name ) + '</dd>' : '' ) +
 			'<dt>Technicien</dt><dd>' + escapeHtml( tech ? tech.name : '' ) + '</dd>' +
 			'<dt>Date et heure</dt><dd>' + escapeHtml( dateLabel ) + ' à ' + escapeHtml( this.selectedTime ) + '</dd>' +
 			'<dt>Client</dt><dd>' + escapeHtml( name ) + ' — ' + escapeHtml( phone ) + '</dd>' +
@@ -438,7 +514,7 @@
 
 	MPAgendaBooking.prototype.submitBooking = function () {
 		var self = this;
-		var errorEl = document.getElementById( 'mp-agenda-step4-error' );
+		var errorEl = document.getElementById( 'mp-agenda-step5-error' );
 		errorEl.hidden = true;
 
 		var submitBtn = document.getElementById( 'mp-agenda-submit' );
@@ -471,7 +547,7 @@
 				errorEl.hidden = false;
 
 				if ( 'mp_agenda_slot_taken' === err.code ) {
-					self.goToStep( '2' );
+					self.goToStep( '3' );
 					self.loadSlots();
 				}
 			} )

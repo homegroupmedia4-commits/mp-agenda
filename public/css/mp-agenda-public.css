@@ -134,6 +134,62 @@
 	color: var(--mp-text-secondary);
 }
 
+/* Cards showrooms */
+.mp-agenda-showroom-cards {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 12px;
+}
+@media (min-width: 480px) {
+	.mp-agenda-showroom-cards {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+.mp-agenda-showroom-card {
+	border: 2px solid var(--mp-border);
+	border-radius: 12px;
+	padding: 16px;
+	text-align: center;
+	cursor: pointer;
+	background: #fff;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mp-agenda-showroom-card:hover {
+	box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.mp-agenda-showroom-card.is-selected {
+	border-color: var(--mp-primary);
+	background: #eff6ff;
+}
+.mp-agenda-showroom-card img {
+	width: 64px;
+	height: 64px;
+	border-radius: 50%;
+	object-fit: cover;
+	margin-bottom: 8px;
+}
+.mp-agenda-showroom-photo-placeholder {
+	width: 64px;
+	height: 64px;
+	border-radius: 50%;
+	background: var(--mp-primary);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 22px;
+	margin: 0 auto 8px;
+}
+.mp-agenda-showroom-card strong {
+	display: block;
+	margin-bottom: 2px;
+}
+.mp-agenda-showroom-card span {
+	font-size: 12px;
+	color: var(--mp-text-secondary);
+}
+
 /* Mini calendrier */
 .mp-agenda-mini-calendar {
 	border: 1px solid var(--mp-border);

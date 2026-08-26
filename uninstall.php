@@ -24,9 +24,12 @@ if ( ! $keep_data ) {
 		$wpdb->prefix . 'mp_agenda_appointments',
 		$wpdb->prefix . 'mp_agenda_blocked_slots',
 		$wpdb->prefix . 'mp_agenda_technicians',
+		$wpdb->prefix . 'mp_agenda_showrooms',
 	);
 
 	foreach ( $tables as $table ) {
+		// La table technicians étant elle-même supprimée ci-dessous, sa colonne
+		// showroom_id disparaît avec elle (pas besoin d'un ALTER TABLE ... DROP COLUMN séparé).
 		$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 	}
 

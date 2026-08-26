@@ -50,6 +50,7 @@ class MP_Agenda_Public {
 				'i18n'                    => array(
 					'loading'        => __( 'Chargement…', 'mp-agenda' ),
 					'noSlots'        => __( 'Aucun créneau disponible ce jour-là.', 'mp-agenda' ),
+					'noShowrooms'    => __( 'Aucun showroom disponible pour le moment.', 'mp-agenda' ),
 					'selectSlot'     => __( 'Merci de choisir un créneau.', 'mp-agenda' ),
 					'requiredFields' => __( 'Merci de remplir tous les champs obligatoires.', 'mp-agenda' ),
 					'gdprRequired'   => __( 'Merci d\'accepter la mention RGPD.', 'mp-agenda' ),

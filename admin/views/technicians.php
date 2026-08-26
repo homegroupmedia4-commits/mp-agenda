@@ -10,6 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 $mp_technicians  = MP_Agenda_DB::get_technicians();
+$mp_showrooms    = MP_Agenda_DB::get_showrooms( true );
 $mp_editing_id   = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
 $mp_editing      = $mp_editing_id ? MP_Agenda_DB::get_technician( $mp_editing_id ) : null;
 $mp_google_ready = get_option( 'mp_agenda_google_client_id' ) && get_option( 'mp_agenda_google_client_secret' );
@@ -73,6 +74,16 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 				<div class="mp-agenda-field">
 					<label for="mp-zone"><?php esc_html_e( 'Zone d\'intervention', 'mp-agenda' ); ?></label>
 					<input type="text" id="mp-zone" name="zone" value="<?php echo esc_attr( $mp_editing['zone'] ?? '' ); ?>" placeholder="<?php esc_attr_e( 'Ex : Paris et petite couronne', 'mp-agenda' ); ?>" />
+				</div>
+
+				<div class="mp-agenda-field">
+					<label for="mp-showroom"><?php esc_html_e( 'Showroom', 'mp-agenda' ); ?></label>
+					<select id="mp-showroom" name="showroom_id">
+						<option value=""><?php esc_html_e( 'Aucun (tous les showrooms)', 'mp-agenda' ); ?></option>
+						<?php foreach ( $mp_showrooms as $mp_showroom ) : ?>
+							<option value="<?php echo esc_attr( $mp_showroom['id'] ); ?>" <?php selected( $mp_editing['showroom_id'] ?? '', $mp_showroom['id'] ); ?>><?php echo esc_html( $mp_showroom['name'] ); ?></option>
+						<?php endforeach; ?>
+					</select>
 				</div>
 
 				<div class="mp-agenda-field">

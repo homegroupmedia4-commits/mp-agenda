@@ -25,8 +25,26 @@ class MP_Agenda_Activator {
 	public static function activate() {
 		self::create_tables();
 		self::seed_default_technicians();
+		self::seed_default_showrooms();
 		self::set_default_options();
 		self::schedule_cron();
+
+		update_option( 'mp_agenda_db_version', MP_AGENDA_DB_VERSION );
+	}
+
+	/**
+	 * Exécute la mise à niveau des tables/données pour un plugin déjà actif
+	 * (sans passer par activate()), déclenché quand MP_AGENDA_DB_VERSION change.
+	 *
+	 * @return void
+	 */
+	public static function maybe_upgrade() {
+		if ( get_option( 'mp_agenda_db_version' ) === MP_AGENDA_DB_VERSION ) {
+			return;
+		}
+
+		self::create_tables();
+		self::seed_default_showrooms();
 
 		update_option( 'mp_agenda_db_version', MP_AGENDA_DB_VERSION );
 	}
@@ -105,11 +123,46 @@ class MP_Agenda_Activator {
 			KEY idx_google_event (google_event_id)
 		) {$charset_collate};";
 
+		$table_showrooms = $wpdb->prefix . 'mp_agenda_showrooms';
+
+		$sql_showrooms = "CREATE TABLE {$table_showrooms} (
+			id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			name VARCHAR(200) NOT NULL,
+			address TEXT DEFAULT NULL,
+			phone VARCHAR(30) DEFAULT NULL,
+			photo_url VARCHAR(500) DEFAULT NULL,
+			is_active TINYINT(1) NOT NULL DEFAULT 1,
+			display_order INT NOT NULL DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY  (id)
+		) {$charset_collate};";
+
 		// Note : les FOREIGN KEY ne sont pas gérées par dbDelta, l'intégrité
 		// référentielle est donc assurée au niveau applicatif (class-mp-agenda-db.php).
 		dbDelta( $sql_technicians );
 		dbDelta( $sql_appointments );
 		dbDelta( $sql_blocked_slots );
+		dbDelta( $sql_showrooms );
+
+		self::add_showroom_id_column();
+	}
+
+	/**
+	 * Ajoute la colonne showroom_id à la table des techniciens si elle n'existe pas déjà
+	 * (association technicien ↔ showroom, NULL = rattaché à tous les showrooms).
+	 *
+	 * @return void
+	 */
+	private static function add_showroom_id_column() {
+		global $wpdb;
+
+		$table  = $wpdb->prefix . 'mp_agenda_technicians';
+		$exists = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM ' . $table . ' LIKE %s', 'showroom_id' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( empty( $exists ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN showroom_id BIGINT UNSIGNED DEFAULT NULL AFTER zone" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
 	}
 
 	/**
@@ -159,6 +212,47 @@ class MP_Agenda_Activator {
 
 		foreach ( $technicians as $technician ) {
 			$wpdb->insert( $table, $technician ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+		}
+	}
+
+	/**
+	 * Crée les fiches des trois showrooms par défaut si aucun showroom n'existe encore.
+	 *
+	 * @return void
+	 */
+	private static function seed_default_showrooms() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'mp_agenda_showrooms';
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		if ( $count > 0 ) {
+			return;
+		}
+
+		$showrooms = array(
+			array(
+				'name'          => 'Showroom Clamart',
+				'address'       => '557 Avenue du Général de Gaulle, 92140 Clamart',
+				'is_active'     => 1,
+				'display_order' => 1,
+			),
+			array(
+				'name'          => 'Showroom Massy',
+				'address'       => '6 Rte de la Bonde, 91300 Massy',
+				'is_active'     => 1,
+				'display_order' => 2,
+			),
+			array(
+				'name'          => 'Showroom Boulogne',
+				'address'       => '34 Quai Alphonse le Gallo, 92100 Boulogne-Billancourt',
+				'is_active'     => 1,
+				'display_order' => 3,
+			),
+		);
+
+		foreach ( $showrooms as $showroom ) {
+			$wpdb->insert( $table, $showroom ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
 		}
 	}
 

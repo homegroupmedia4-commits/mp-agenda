@@ -107,6 +107,16 @@ class MP_Agenda_REST_API {
 
 		register_rest_route(
 			$this->namespace,
+			'/showrooms',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'get_showrooms' ),
+				'permission_callback' => array( $this, 'public_permission_callback' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/technicians/(?P<id>\d+)',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -485,15 +495,53 @@ class MP_Agenda_REST_API {
 
 	/**
 	 * Liste les techniciens actifs (endpoint public, données limitées).
+	 * Filtrable par showroom_id : renvoie alors les techniciens rattachés à ce
+	 * showroom, plus ceux sans showroom_id (rattachés à tous les showrooms).
 	 *
+	 * @param WP_REST_Request $request Requête REST.
 	 * @return WP_REST_Response
 	 */
-	public function get_technicians() {
-		$technicians = MP_Agenda_DB::get_technicians( true );
+	public function get_technicians( WP_REST_Request $request ) {
+		$showroom_id = absint( $request->get_param( 'showroom_id' ) );
+
+		if ( $showroom_id ) {
+			$technicians = MP_Agenda_DB::get_technicians_by_showroom( $showroom_id, true );
+		} else {
+			$technicians = MP_Agenda_DB::get_technicians( true );
+		}
 
 		$public_data = array_map( array( $this, 'format_public_technician' ), $technicians );
 
 		return new WP_REST_Response( array( 'items' => $public_data ), 200 );
+	}
+
+	/**
+	 * Liste les showrooms actifs (endpoint public, pour l'étape 1 du formulaire de réservation).
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function get_showrooms() {
+		$showrooms = MP_Agenda_DB::get_showrooms( true );
+
+		$public_data = array_map( array( $this, 'format_public_showroom' ), $showrooms );
+
+		return new WP_REST_Response( array( 'items' => $public_data ), 200 );
+	}
+
+	/**
+	 * Formate les données publiques d'un showroom.
+	 *
+	 * @param array $showroom Données brutes du showroom.
+	 * @return array
+	 */
+	private function format_public_showroom( $showroom ) {
+		return array(
+			'id'        => (int) $showroom['id'],
+			'name'      => $showroom['name'],
+			'address'   => $showroom['address'],
+			'phone'     => $showroom['phone'],
+			'photo_url' => $showroom['photo_url'],
+		);
 	}
 
 	/**
@@ -528,6 +576,7 @@ class MP_Agenda_REST_API {
 			'name'          => $tech['name'],
 			'zone'          => $tech['zone'],
 			'photo_url'     => $tech['photo_url'],
+			'showroom_id'   => isset( $tech['showroom_id'] ) && null !== $tech['showroom_id'] ? (int) $tech['showroom_id'] : null,
 			'working_hours' => is_array( $working_hours ) ? $working_hours : array(),
 		);
 	}

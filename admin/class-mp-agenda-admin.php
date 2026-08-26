@@ -25,6 +25,8 @@ class MP_Agenda_Admin {
 
 		add_action( 'admin_post_mp_agenda_save_technician', array( $this, 'handle_save_technician' ) );
 		add_action( 'admin_post_mp_agenda_delete_technician', array( $this, 'handle_delete_technician' ) );
+		add_action( 'admin_post_mp_agenda_save_showroom', array( $this, 'handle_save_showroom' ) );
+		add_action( 'admin_post_mp_agenda_delete_showroom', array( $this, 'handle_delete_showroom' ) );
 		add_action( 'admin_post_mp_agenda_save_settings', array( $this, 'handle_save_settings' ) );
 		add_action( 'admin_post_mp_agenda_save_intervention_types', array( $this, 'handle_save_intervention_types' ) );
 		add_action( 'admin_post_mp_agenda_save_google_credentials', array( $this, 'handle_save_google_credentials' ) );
@@ -53,6 +55,7 @@ class MP_Agenda_Admin {
 		add_submenu_page( 'mp-agenda', __( 'Planning', 'mp-agenda' ), __( 'Planning', 'mp-agenda' ), $capability, 'mp-agenda', array( $this, 'render_dashboard' ) );
 		add_submenu_page( 'mp-agenda', __( 'Rendez-vous', 'mp-agenda' ), __( 'Rendez-vous', 'mp-agenda' ), $capability, 'mp-agenda-appointments', array( $this, 'render_appointments' ) );
 		add_submenu_page( 'mp-agenda', __( 'Techniciens', 'mp-agenda' ), __( 'Techniciens', 'mp-agenda' ), $capability, 'mp-agenda-technicians', array( $this, 'render_technicians' ) );
+		add_submenu_page( 'mp-agenda', __( 'Showrooms', 'mp-agenda' ), __( 'Showrooms', 'mp-agenda' ), $capability, 'mp-agenda-showrooms', array( $this, 'render_showrooms' ) );
 		add_submenu_page( 'mp-agenda', __( 'Réglages', 'mp-agenda' ), __( 'Réglages', 'mp-agenda' ), $capability, 'mp-agenda-settings', array( $this, 'render_settings' ) );
 	}
 
@@ -139,6 +142,15 @@ class MP_Agenda_Admin {
 	}
 
 	/**
+	 * Affiche la page Showrooms.
+	 *
+	 * @return void
+	 */
+	public function render_showrooms() {
+		require MP_AGENDA_PLUGIN_DIR . 'admin/views/showrooms.php';
+	}
+
+	/**
 	 * Affiche la page Réglages.
 	 *
 	 * @return void
@@ -167,12 +179,15 @@ class MP_Agenda_Admin {
 			);
 		}
 
+		$showroom_id = isset( $_POST['showroom_id'] ) ? sanitize_text_field( wp_unslash( $_POST['showroom_id'] ) ) : '';
+
 		$data = array(
 			'name'          => isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '',
 			'email'         => isset( $_POST['email'] ) ? sanitize_email( wp_unslash( $_POST['email'] ) ) : '',
 			'phone'         => isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '',
 			'photo_url'     => isset( $_POST['photo_url'] ) ? esc_url_raw( wp_unslash( $_POST['photo_url'] ) ) : '',
 			'zone'          => isset( $_POST['zone'] ) ? sanitize_text_field( wp_unslash( $_POST['zone'] ) ) : '',
+			'showroom_id'   => ( '' !== $showroom_id ) ? absint( $showroom_id ) : null,
 			'working_hours' => wp_json_encode( $working_hours ),
 			'is_active'     => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
@@ -197,6 +212,52 @@ class MP_Agenda_Admin {
 		}
 
 		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-technicians', 'mp_agenda_notice' => 'deleted' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Traite l'enregistrement (création/modification) d'un showroom.
+	 *
+	 * @return void
+	 */
+	public function handle_save_showroom() {
+		$this->verify_request( 'mp_agenda_save_showroom' );
+
+		$id = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+
+		$data = array(
+			'name'          => isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '',
+			'address'       => isset( $_POST['address'] ) ? sanitize_textarea_field( wp_unslash( $_POST['address'] ) ) : '',
+			'phone'         => isset( $_POST['phone'] ) ? sanitize_text_field( wp_unslash( $_POST['phone'] ) ) : '',
+			'photo_url'     => isset( $_POST['photo_url'] ) ? esc_url_raw( wp_unslash( $_POST['photo_url'] ) ) : '',
+			'display_order' => isset( $_POST['display_order'] ) ? absint( $_POST['display_order'] ) : 0,
+			'is_active'     => isset( $_POST['is_active'] ) ? 1 : 0,
+		);
+
+		if ( $id ) {
+			MP_Agenda_DB::update_showroom( $id, $data );
+		} else {
+			MP_Agenda_DB::create_showroom( $data );
+		}
+
+		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-showrooms', 'mp_agenda_notice' => 'saved' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Traite la suppression d'un showroom.
+	 *
+	 * @return void
+	 */
+	public function handle_delete_showroom() {
+		$this->verify_request( 'mp_agenda_delete_showroom' );
+
+		$id = isset( $_POST['id'] ) ? absint( $_POST['id'] ) : 0;
+		if ( $id ) {
+			MP_Agenda_DB::delete_showroom( $id );
+		}
+
+		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-showrooms', 'mp_agenda_notice' => 'deleted' ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
