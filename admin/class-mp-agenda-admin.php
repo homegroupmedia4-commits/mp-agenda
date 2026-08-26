@@ -346,6 +346,13 @@ class MP_Agenda_Admin {
 			update_option( 'mp_agenda_gdpr_retention_months', absint( $_POST['gdpr_retention_months'] ) );
 		}
 
+		// N'est mis à jour que si l'onglet "Général" est celui qui a été soumis (présence du
+		// marqueur ci-dessous), pour ne pas réinitialiser cette case à cocher à "décochée"
+		// lors de l'enregistrement des onglets Notifications ou RGPD, qui ne l'affichent pas.
+		if ( isset( $_POST['mp_agenda_general_tab'] ) ) {
+			update_option( 'mp_agenda_delete_data_on_uninstall', isset( $_POST['delete_data_on_uninstall'] ) ? 1 : 0 );
+		}
+
 		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-settings', 'mp_agenda_notice' => 'saved' ), admin_url( 'admin.php' ) ) );
 		exit;
 	}

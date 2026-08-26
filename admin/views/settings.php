@@ -9,13 +9,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$mp_settings           = get_option( 'mp_agenda_settings', array() );
-$mp_gdpr_text          = get_option( 'mp_agenda_gdpr_text', '' );
-$mp_gdpr_retention     = get_option( 'mp_agenda_gdpr_retention_months', 24 );
-$mp_google_client_id   = get_option( 'mp_agenda_google_client_id', '' );
-$mp_google_secret      = get_option( 'mp_agenda_google_client_secret', '' );
-$mp_callback_url       = admin_url( 'admin-ajax.php?action=mp_agenda_google_callback' );
-$mp_active_tab         = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general';
+$mp_settings                 = get_option( 'mp_agenda_settings', array() );
+$mp_delete_data_on_uninstall = get_option( 'mp_agenda_delete_data_on_uninstall', false );
+$mp_gdpr_text                = get_option( 'mp_agenda_gdpr_text', '' );
+$mp_gdpr_retention           = get_option( 'mp_agenda_gdpr_retention_months', 24 );
+$mp_google_client_id         = get_option( 'mp_agenda_google_client_id', '' );
+$mp_google_secret            = get_option( 'mp_agenda_google_client_secret', '' );
+$mp_callback_url             = admin_url( 'admin-ajax.php?action=mp_agenda_google_callback' );
+$mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general';
 ?>
 <div class="wrap mp-agenda-wrap">
 	<h1 class="mp-agenda-title"><?php esc_html_e( 'Réglages MP Agenda', 'mp-agenda' ); ?></h1>
@@ -39,6 +40,7 @@ $mp_active_tab         = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
 			<?php wp_nonce_field( 'mp_agenda_save_settings' ); ?>
 			<input type="hidden" name="action" value="mp_agenda_save_settings" />
+			<input type="hidden" name="mp_agenda_general_tab" value="1" />
 
 			<div class="mp-agenda-field">
 				<label for="company_name"><?php esc_html_e( 'Nom de l\'entreprise', 'mp-agenda' ); ?></label>
@@ -65,6 +67,16 @@ $mp_active_tab         = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 
 					<input type="checkbox" name="require_technician_choice" value="1" <?php checked( ! empty( $mp_settings['require_technician_choice'] ) ); ?> />
 					<span><?php esc_html_e( 'Rendre le choix du commercial obligatoire dans le formulaire client', 'mp-agenda' ); ?></span>
 				</label>
+			</div>
+
+			<hr class="mp-agenda-separator" />
+
+			<div class="mp-agenda-field">
+				<label class="mp-agenda-toggle">
+					<input type="checkbox" name="delete_data_on_uninstall" value="1" <?php checked( ! empty( $mp_delete_data_on_uninstall ) ); ?> />
+					<span><?php esc_html_e( 'Supprimer toutes les données à la désinstallation', 'mp-agenda' ); ?></span>
+				</label>
+				<p class="description"><?php esc_html_e( 'Si décochée (recommandé), les rendez-vous, techniciens, showrooms, services et réglages sont conservés en base même après suppression du plugin.', 'mp-agenda' ); ?></p>
 			</div>
 
 			<div class="mp-agenda-form-actions">
