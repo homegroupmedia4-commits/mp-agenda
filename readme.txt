@@ -4,7 +4,7 @@ Tags: rendez-vous, planning, calendrier, google agenda, réservation
 Requires at least: 6.4
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ Non, la synchronisation Google Agenda est optionnelle. Le plugin fonctionne plei
 Oui, la page "Commerciaux" permet d'ajouter, modifier ou supprimer autant de commerciaux que nécessaire.
 
 == Changelog ==
+
+= 1.2.1 =
+* Correctif : les emails de confirmation (client et commercial) n'étaient plus envoyés après une réservation en ligne si la table des services n'avait pas encore été créée en base. get_appointment() se replie désormais sur une requête sans la jointure services, la migration se rejoue à chaque admin_init, et les échecs sont désormais tracés dans le journal PHP.
 
 = 1.2.0 =
 * Renommage "Technicien" en "Commercial" dans toute l'interface.

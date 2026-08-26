@@ -319,7 +319,7 @@ class MP_Agenda_DB {
 		$tech     = self::table_technicians();
 		$services = self::table_services();
 
-		return $wpdb->get_row(
+		$result = $wpdb->get_row(
 			$wpdb->prepare(
 				"SELECT a.*, t.name AS technician_name, s.name AS service_name FROM {$table} a
 				LEFT JOIN {$tech} t ON t.id = a.technician_id
@@ -329,6 +329,23 @@ class MP_Agenda_DB {
 			),
 			ARRAY_A
 		);
+
+		if ( null === $result || '' !== $wpdb->last_error ) {
+			// Repli si la table/colonne "services" n'existe pas encore (migration pas
+			// encore passée) : on retente sans ce JOIN pour ne pas priver le RDV de ses
+			// données de base (voir MP_Agenda_Activator::maybe_upgrade()).
+			$result = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT a.*, t.name AS technician_name FROM {$table} a
+					LEFT JOIN {$tech} t ON t.id = a.technician_id
+					WHERE a.id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+					absint( $id )
+				),
+				ARRAY_A
+			);
+		}
+
+		return $result;
 	}
 
 	/**

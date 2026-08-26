@@ -40,11 +40,16 @@ class MP_Agenda_Activator {
 	 * @return void
 	 */
 	public static function maybe_upgrade() {
+		// Toujours ré-exécuter dbDelta + les ALTER TABLE de colonnes : ces opérations sont
+		// idempotentes et permettent de rattraper un schéma manquant (table ou colonne
+		// jamais créée suite à un échec silencieux) même si mp_agenda_db_version est déjà
+		// à jour. Ne pas gater ceci derrière le check de version ci-dessous.
+		self::create_tables();
+
 		if ( get_option( 'mp_agenda_db_version' ) === MP_AGENDA_DB_VERSION ) {
 			return;
 		}
 
-		self::create_tables();
 		self::seed_default_showrooms();
 		self::seed_default_services();
 

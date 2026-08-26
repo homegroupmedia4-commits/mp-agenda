@@ -800,21 +800,26 @@ class MP_Agenda_REST_API {
 		$id = MP_Agenda_DB::save_appointment( $data );
 		$appointment = MP_Agenda_DB::get_appointment( $id );
 
-		$google_sync = new MP_Agenda_Google_Sync();
-		$google_sync->push_appointment( $appointment );
+		if ( ! $appointment ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( '[MP Agenda] book_appointment: MP_Agenda_DB::get_appointment(%d) a retourné null après création du RDV — synchro Google et notifications email ignorées.', $id ) );
+		} else {
+			$google_sync = new MP_Agenda_Google_Sync();
+			$google_sync->push_appointment( $appointment );
 
-		$notifications = new MP_Agenda_Notifications();
-		$notifications->send_appointment_notifications( $appointment );
+			$notifications = new MP_Agenda_Notifications();
+			$notifications->send_appointment_notifications( $appointment );
+		}
 
 		return new WP_REST_Response(
 			array(
 				'success'     => true,
 				'appointment' => array(
-					'id'                => $appointment['id'],
+					'id'                => $appointment['id'] ?? $id,
 					'technician_name'   => $technician['name'],
-					'start_datetime'    => $appointment['start_datetime'],
-					'intervention_type' => $appointment['intervention_type'],
-					'service_name'      => $appointment['service_name'],
+					'start_datetime'    => $appointment['start_datetime'] ?? $start_dt->format( 'Y-m-d H:i:s' ),
+					'intervention_type' => $appointment['intervention_type'] ?? $intervention,
+					'service_name'      => $appointment['service_name'] ?? null,
 				),
 			),
 			201
