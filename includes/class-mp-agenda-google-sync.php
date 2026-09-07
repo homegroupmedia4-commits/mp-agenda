@@ -377,16 +377,22 @@ class MP_Agenda_Google_Sync {
 	/**
 	 * Synchronise tous les techniciens connectés à Google Agenda.
 	 *
+	 * @param bool $full_sync Si true (synchro manuelle via le bouton), ignore le
+	 *                        timestamp de dernière synchro et récupère tous les
+	 *                        événements des 30 derniers jours plutôt que seulement
+	 *                        ceux modifiés depuis le dernier passage. Le cron
+	 *                        (mp_agenda_google_sync_cron) doit laisser ce paramètre
+	 *                        à false pour rester incrémental.
 	 * @return void
 	 */
-	public function sync_all() {
+	public function sync_all( $full_sync = false ) {
 		$technicians = MP_Agenda_DB::get_technicians( true );
 
 		foreach ( $technicians as $technician ) {
 			if ( empty( $technician['google_refresh_token'] ) ) {
 				continue;
 			}
-			$this->sync_technician( $technician );
+			$this->sync_technician( $technician, $full_sync );
 		}
 	}
 
@@ -394,14 +400,20 @@ class MP_Agenda_Google_Sync {
 	 * Synchronise le calendrier Google d'un technicien vers les tables locales.
 	 *
 	 * @param array $technician Données du technicien.
+	 * @param bool  $full_sync  Si true, ignore le timestamp de dernière synchro
+	 *                          stocké et interroge Google sur les 30 derniers
+	 *                          jours (synchro manuelle "🔄 Synchroniser Google").
+	 *                          Si false, n'interroge Google que depuis le dernier
+	 *                          passage (comportement incrémental du cron).
 	 * @return void
 	 */
-	private function sync_technician( $technician ) {
+	private function sync_technician( $technician, $full_sync = false ) {
 		$this->log( sprintf(
-			'sync_technician START for tech_id=%d, name=%s, calendar_id=%s',
+			'sync_technician START for tech_id=%d, name=%s, calendar_id=%s, full_sync=%s',
 			$technician['id'],
 			$technician['name'] ?? '?',
-			$technician['google_calendar_id'] ?: '(vide, repli sur "primary")'
+			$technician['google_calendar_id'] ?: '(vide, repli sur "primary")',
+			$full_sync ? 'true' : 'false'
 		) );
 
 		$access_token = $this->get_valid_access_token( $technician );
@@ -410,11 +422,23 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$calendar_id  = $technician['google_calendar_id'] ?: 'primary';
-		$option_key   = 'mp_agenda_google_last_sync_' . $technician['id'];
-		$last_sync    = get_option( $option_key );
-		$updated_min  = $last_sync ? $last_sync : gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-30 days' ) );
-		$now          = gmdate( 'Y-m-d\TH:i:s\Z' );
+		$calendar_id     = $technician['google_calendar_id'] ?: 'primary';
+		$option_key      = 'mp_agenda_google_last_sync_' . $technician['id'];
+		$thirty_days_ago = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-30 days' ) );
+
+		if ( $full_sync ) {
+			// Synchro manuelle : on ignore volontairement le timestamp stocké pour
+			// récupérer TOUS les événements récents, y compris ceux créés avant la
+			// dernière synchro (updatedMin exclurait sinon un événement Google créé
+			// puis jamais re-modifié depuis, ce qui donnait "items": [] en boucle).
+			$updated_min = $thirty_days_ago;
+			$this->log( sprintf( 'sync_technician tech_id=%d : full_sync=true — updatedMin forcé à %s (30 jours) au lieu du timestamp stocké.', $technician['id'], $updated_min ) );
+		} else {
+			$last_sync   = get_option( $option_key );
+			$updated_min = $last_sync ? $last_sync : $thirty_days_ago;
+		}
+
+		$now = gmdate( 'Y-m-d\TH:i:s\Z' );
 
 		$params = array(
 			'singleEvents' => 'true',

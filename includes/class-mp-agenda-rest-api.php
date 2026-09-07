@@ -865,11 +865,15 @@ class MP_Agenda_REST_API {
 	/**
 	 * Force une synchronisation manuelle de tous les techniciens connectés à Google.
 	 *
+	 * En full_sync (true) : ignore le timestamp de dernière synchro pour
+	 * récupérer tous les événements des 30 derniers jours, pas seulement ceux
+	 * modifiés depuis le dernier passage — voir MP_Agenda_Google_Sync::sync_all().
+	 *
 	 * @return WP_REST_Response
 	 */
 	public function force_google_sync() {
 		$google_sync = new MP_Agenda_Google_Sync();
-		$google_sync->sync_all();
+		$google_sync->sync_all( true );
 
 		return new WP_REST_Response(
 			array(
