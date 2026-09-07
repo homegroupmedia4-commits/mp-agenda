@@ -58,6 +58,7 @@ class MP_Agenda_Google_Sync {
 	 */
 	public function init() {
 		add_action( 'mp_agenda_google_sync_cron', array( $this, 'sync_all' ) );
+		add_action( 'mp_agenda_google_token_check_cron', array( $this, 'check_all_tokens' ) );
 		add_action( 'wp_ajax_mp_agenda_google_connect', array( $this, 'handle_connect' ) );
 		add_action( 'wp_ajax_mp_agenda_google_callback', array( $this, 'handle_callback' ) );
 	}
@@ -174,32 +175,76 @@ class MP_Agenda_Google_Sync {
 	}
 
 	/**
-	 * Retourne un access_token valide pour un technicien, en le renouvelant si besoin.
+	 * Vérifie et renouvelle si besoin l'access_token d'un technicien, à appeler
+	 * AVANT tout appel à l'API Google (events.list, events.insert/patch/delete,
+	 * freeBusy, etc.) — aucun appel Google ne doit plus lire
+	 * google_access_token directement.
 	 *
-	 * @param array $technician Données du technicien.
-	 * @return string|null
+	 * Renouvelle avec une marge de 5 minutes (pas seulement une fois le token
+	 * expiré) pour ne jamais démarrer un appel avec un token sur le point
+	 * d'expirer en cours de route. En cas d'échec réseau temporaire, réessaie
+	 * jusqu'à 2 fois avec 2 secondes d'attente. Si Google rejette carrément le
+	 * refresh_token (error=invalid_grant, ex. accès révoqué par l'utilisateur ou
+	 * expiration du mode "Testing" au bout de 7 jours), le technicien est
+	 * marqué déconnecté en BDD et l'admin WordPress est alerté par email — voir
+	 * disconnect_and_alert().
+	 *
+	 * @param array $technician Données du technicien (doit contenir au moins 'id').
+	 * @return string|false Access token déchiffré valide, ou false si impossible à obtenir.
 	 */
-	private function get_valid_access_token( $technician ) {
+	private function ensure_valid_token( $technician ) {
 		if ( empty( $technician['google_refresh_token'] ) ) {
-			return null;
+			return false;
 		}
 
 		$expires_at = $technician['google_token_expires_at'] ? strtotime( $technician['google_token_expires_at'] ) : 0;
 
-		if ( $expires_at > time() + 60 && ! empty( $technician['google_access_token'] ) ) {
+		if ( $expires_at > time() + 5 * MINUTE_IN_SECONDS && ! empty( $technician['google_access_token'] ) ) {
 			return $this->decrypt( $technician['google_access_token'] );
 		}
 
-		return $this->refresh_access_token( $technician );
+		$max_attempts = 3; // 1 tentative initiale + 2 réessais.
+
+		for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
+			$result = $this->do_refresh_access_token( $technician );
+
+			if ( 'invalid_grant' === ( $result['error'] ?? '' ) ) {
+				$this->log( sprintf( 'ensure_valid_token tech_id=%d : refresh_token rejeté par Google (invalid_grant) — déconnexion et alerte admin.', $technician['id'] ) );
+				$this->disconnect_and_alert( $technician );
+				return false;
+			}
+
+			if ( ! empty( $result['access_token'] ) ) {
+				$this->log( sprintf( 'ensure_valid_token tech_id=%d : access_token renouvelé (tentative %d/%d).', $technician['id'], $attempt, $max_attempts ) );
+				return $result['access_token'];
+			}
+
+			$this->log( sprintf(
+				'ensure_valid_token tech_id=%d : échec du renouvellement (tentative %d/%d) — %s',
+				$technician['id'],
+				$attempt,
+				$max_attempts,
+				$result['message'] ?? 'raison inconnue'
+			) );
+
+			if ( $attempt < $max_attempts ) {
+				sleep( 2 );
+			}
+		}
+
+		$this->log( sprintf( 'ensure_valid_token tech_id=%d : échec définitif après %d tentatives (probable panne réseau temporaire côté Google).', $technician['id'], $max_attempts ) );
+		return false;
 	}
 
 	/**
-	 * Renouvelle l'access_token via le refresh_token stocké.
+	 * Exécute une tentative de renouvellement d'access_token auprès de Google.
+	 * En cas de succès, enregistre immédiatement le nouvel access_token,
+	 * expires_at, et — si Google en a renvoyé un — le nouveau refresh_token.
 	 *
 	 * @param array $technician Données du technicien.
-	 * @return string|null
+	 * @return array{access_token?:string,error?:string,message?:string}
 	 */
-	private function refresh_access_token( $technician ) {
+	private function do_refresh_access_token( $technician ) {
 		$refresh_token = $this->decrypt( $technician['google_refresh_token'] );
 
 		$response = wp_remote_post(
@@ -215,26 +260,106 @@ class MP_Agenda_Google_Sync {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return null;
+			return array( 'message' => $response->get_error_message() );
 		}
 
+		$code = (int) wp_remote_retrieve_response_code( $response );
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
+		if ( ! empty( $body['error'] ) ) {
+			return array(
+				'error'   => $body['error'],
+				'message' => $body['error_description'] ?? $body['error'],
+			);
+		}
+
 		if ( empty( $body['access_token'] ) ) {
-			return null;
+			return array( 'message' => sprintf( 'réponse Google inattendue (HTTP %d)', $code ) );
 		}
 
 		$expires_at = gmdate( 'Y-m-d H:i:s', time() + (int) ( $body['expires_in'] ?? 3600 ) );
 
+		$update = array(
+			'google_access_token'     => $this->encrypt( $body['access_token'] ),
+			'google_token_expires_at' => $expires_at,
+		);
+
+		// Google peut renvoyer un nouveau refresh_token lors du renouvellement
+		// (rare mais documenté) : on le stocke alors à la place de l'ancien.
+		if ( ! empty( $body['refresh_token'] ) ) {
+			$update['google_refresh_token'] = $this->encrypt( $body['refresh_token'] );
+		}
+
+		MP_Agenda_DB::save_technician( $update, $technician['id'] );
+
+		return array( 'access_token' => $body['access_token'] );
+	}
+
+	/**
+	 * Déconnecte un technicien de Google (vide ses tokens en BDD, comme
+	 * disconnect_google()) et alerte l'admin WordPress par email pour qu'il le
+	 * reconnecte manuellement depuis MP Agenda → Commerciaux.
+	 *
+	 * @param array $technician Données du technicien.
+	 * @return void
+	 */
+	private function disconnect_and_alert( $technician ) {
 		MP_Agenda_DB::save_technician(
 			array(
-				'google_access_token'     => $this->encrypt( $body['access_token'] ),
-				'google_token_expires_at' => $expires_at,
+				'google_calendar_id'      => null,
+				'google_access_token'     => null,
+				'google_refresh_token'    => null,
+				'google_token_expires_at' => null,
 			),
 			$technician['id']
 		);
 
-		return $body['access_token'];
+		$admin_email = get_option( 'admin_email' );
+		if ( ! $admin_email ) {
+			return;
+		}
+
+		$name    = $technician['name'] ?? ( '#' . $technician['id'] );
+		$subject = __( '[MP Agenda] Un commercial a été déconnecté de Google Agenda', 'mp-agenda' );
+		$message = sprintf(
+			/* translators: %s: nom du commercial */
+			__( '⚠️ Le commercial %s a été déconnecté de Google Agenda. Reconnectez-le dans MP Agenda → Commerciaux.', 'mp-agenda' ),
+			$name
+		);
+
+		wp_mail( $admin_email, $subject, $message );
+
+		$this->log( sprintf( 'disconnect_and_alert tech_id=%d : tokens vidés, email d\'alerte envoyé à %s.', $technician['id'], $admin_email ) );
+	}
+
+	/**
+	 * Vérifie quotidiennement le token de chaque technicien connecté à Google
+	 * Agenda (renouvellement si besoin), pour détecter proactivement une
+	 * déconnexion plutôt que d'attendre le prochain RDV/synchro. L'alerte admin
+	 * en cas de token définitivement irrécupérable est déjà envoyée par
+	 * ensure_valid_token()/disconnect_and_alert() — inutile de la dupliquer ici.
+	 *
+	 * Appelée par le cron quotidien mp_agenda_google_token_check_cron
+	 * (voir MP_Agenda_Activator::schedule_cron() / MP_Agenda_Deactivator).
+	 *
+	 * @return void
+	 */
+	public function check_all_tokens() {
+		$technicians = MP_Agenda_DB::get_technicians( true );
+
+		foreach ( $technicians as $technician ) {
+			if ( empty( $technician['google_refresh_token'] ) ) {
+				continue;
+			}
+
+			$this->log( sprintf( 'check_all_tokens : vérification tech_id=%d (%s)', $technician['id'], $technician['name'] ?? '?' ) );
+
+			$access_token = $this->ensure_valid_token( $technician );
+
+			if ( ! $access_token ) {
+				$this->log( sprintf( 'check_all_tokens : tech_id=%d irrécupérable pour l\'instant.', $technician['id'] ) );
+			}
+		}
 	}
 
 	/* ---------------------------------------------------------------------
@@ -254,7 +379,7 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$access_token = $this->get_valid_access_token( $technician );
+		$access_token = $this->ensure_valid_token( $technician );
 		if ( ! $access_token ) {
 			return;
 		}
@@ -331,7 +456,7 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$access_token = $this->get_valid_access_token( $technician );
+		$access_token = $this->ensure_valid_token( $technician );
 		if ( ! $access_token ) {
 			return;
 		}
@@ -345,6 +470,126 @@ class MP_Agenda_Google_Sync {
 				'headers' => array( 'Authorization' => 'Bearer ' . $access_token ),
 			)
 		);
+	}
+
+	/* ---------------------------------------------------------------------
+	 * FreeBusy (vérification temps réel des disponibilités)
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Interroge l'API FreeBusy de Google pour les périodes occupées du
+	 * calendrier d'un technicien sur une journée donnée — en complément des RDV
+	 * et créneaux bloqués déjà en BDD, pour repérer un événement Google très
+	 * récent que la synchro périodique n'a pas encore récupéré.
+	 *
+	 * Repli TOUJOURS silencieux : au moindre problème (pas de Google connecté,
+	 * token, réseau, réponse inattendue), retourne un tableau vide plutôt que de
+	 * faire échouer l'appelant. Le formulaire client ne doit JAMAIS être bloqué
+	 * par un souci côté Google — voir get_available_slots()/book_appointment()
+	 * dans MP_Agenda_REST_API, qui retombent alors sur les données BDD seules.
+	 *
+	 * Le résultat est mis en cache 2 minutes (transient) par technicien/date
+	 * pour éviter d'appeler Google à chaque frappe/rafraîchissement du
+	 * formulaire de réservation.
+	 *
+	 * @param array  $technician Données du technicien.
+	 * @param string $date       Date au format Y-m-d.
+	 * @return array Liste de périodes occupées : array( array( 'start' => 'Y-m-d H:i:s', 'end' => 'Y-m-d H:i:s' ), ... ).
+	 */
+	public function get_freebusy( $technician, $date ) {
+		$tech_id   = $technician['id'] ?? 0;
+		$cache_key = 'mp_agenda_freebusy_' . $tech_id . '_' . $date;
+
+		$cached = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : réponse depuis le cache (transient).', $tech_id, $date ) );
+			return $cached;
+		}
+
+		if ( empty( $technician['google_refresh_token'] ) ) {
+			return array();
+		}
+
+		$access_token = $this->ensure_valid_token( $technician );
+		if ( ! $access_token ) {
+			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : pas d\'access_token valide — fallback silencieux vers [].', $tech_id, $date ) );
+			return array();
+		}
+
+		$calendar_id = $technician['google_calendar_id'] ?: 'primary';
+
+		try {
+			$time_min_dt = new DateTime( $date . ' 00:00:00', wp_timezone() );
+		} catch ( \Exception $e ) {
+			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : date invalide — fallback silencieux vers [].', $tech_id, $date ) );
+			return array();
+		}
+		$time_max_dt = clone $time_min_dt;
+		$time_max_dt->modify( '+1 day' );
+
+		// Format RFC3339 avec l'offset local du site (ex. "2026-09-16T00:00:00+02:00"),
+		// comme le fait déjà to_rfc3339() pour push_appointment().
+		$request_body = array(
+			'timeMin' => $time_min_dt->format( 'Y-m-d\TH:i:sP' ),
+			'timeMax' => $time_max_dt->format( 'Y-m-d\TH:i:sP' ),
+			'items'   => array( array( 'id' => $calendar_id ) ),
+		);
+
+		$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : POST /freeBusy body=%s', $tech_id, $date, wp_json_encode( $request_body ) ) );
+
+		$response = wp_remote_post(
+			self::API_BASE . '/freeBusy',
+			array(
+				'headers' => array(
+					'Authorization' => 'Bearer ' . $access_token,
+					'Content-Type'  => 'application/json',
+				),
+				'body'    => wp_json_encode( $request_body ),
+				'timeout' => 8,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : erreur requête Google — %s — fallback silencieux vers [].', $tech_id, $date, $response->get_error_message() ) );
+			return array();
+		}
+
+		$code     = (int) wp_remote_retrieve_response_code( $response );
+		$raw_body = wp_remote_retrieve_body( $response );
+		$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : HTTP %d — %s', $tech_id, $date, $code, substr( $raw_body, 0, 300 ) ) );
+
+		if ( $code >= 400 ) {
+			return array();
+		}
+
+		$decoded  = json_decode( $raw_body, true );
+		$busy_raw = $decoded['calendars'][ $calendar_id ]['busy'] ?? null;
+
+		if ( ! is_array( $busy_raw ) ) {
+			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : réponse Google inexploitable — fallback silencieux vers [].', $tech_id, $date ) );
+			return array();
+		}
+
+		$busy_periods = array();
+		foreach ( $busy_raw as $period ) {
+			if ( empty( $period['start'] ) || empty( $period['end'] ) ) {
+				continue;
+			}
+			try {
+				$busy_periods[] = array(
+					'start' => ( new DateTime( $period['start'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' ),
+					'end'   => ( new DateTime( $period['end'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' ),
+				);
+			} catch ( \Exception $e ) {
+				continue;
+			}
+		}
+
+		$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : %d période(s) busy retournée(s) par Google.', $tech_id, $date, count( $busy_periods ) ) );
+
+		set_transient( $cache_key, $busy_periods, 2 * MINUTE_IN_SECONDS );
+
+		return $busy_periods;
 	}
 
 	/**
@@ -420,7 +665,7 @@ class MP_Agenda_Google_Sync {
 			$full_sync ? 'true' : 'false'
 		) );
 
-		$access_token = $this->get_valid_access_token( $technician );
+		$access_token = $this->ensure_valid_token( $technician );
 		if ( ! $access_token ) {
 			$this->log( sprintf( 'sync_technician tech_id=%d : impossible d\'obtenir un access_token valide (refresh_token absent/invalide) — synchro annulée.', $technician['id'] ) );
 			return;

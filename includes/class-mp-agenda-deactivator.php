@@ -18,11 +18,13 @@ class MP_Agenda_Deactivator {
 	 * Exécuté lors de la désactivation du plugin.
 	 *
 	 * Ne supprime aucune donnée (les tables et options restent en base) :
-	 * seule la tâche cron de synchronisation Google est déprogrammée.
+	 * seules les tâches cron de synchronisation Google et de vérification des
+	 * tokens sont déprogrammées.
 	 *
 	 * @return void
 	 */
 	public static function deactivate() {
 		wp_clear_scheduled_hook( 'mp_agenda_google_sync_cron' );
+		wp_clear_scheduled_hook( 'mp_agenda_google_token_check_cron' );
 	}
 }

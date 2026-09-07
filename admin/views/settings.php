@@ -118,6 +118,12 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 			</div>
 		</form>
 
+		<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:16px;border-radius:8px;margin-top:16px;">
+			<p style="margin:0;">
+				<?php esc_html_e( '⚠️ Important : Si votre projet Google Cloud est en mode "Testing" (écran de consentement non publié), les tokens expirent après 7 jours et les commerciaux seront déconnectés. Pour des tokens permanents, allez dans Google Cloud Console → Google Auth Platform → Audience → cliquez "Publish app" pour passer en Production.', 'mp-agenda' ); ?>
+			</p>
+		</div>
+
 	<?php elseif ( 'notifications' === $mp_active_tab ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
 			<?php wp_nonce_field( 'mp_agenda_save_settings' ); ?>

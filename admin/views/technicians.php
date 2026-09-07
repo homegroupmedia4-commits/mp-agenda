@@ -160,9 +160,26 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 						</div>
 					</div>
 
+					<?php
+					$mp_tech_has_refresh = ! empty( $mp_tech['google_refresh_token'] );
+					$mp_tech_expires_ts  = ! empty( $mp_tech['google_token_expires_at'] ) ? strtotime( $mp_tech['google_token_expires_at'] ) : 0;
+					$mp_tech_token_valid = $mp_tech_expires_ts > time();
+					?>
 					<div class="mp-agenda-technician-google">
-						<?php if ( ! empty( $mp_tech['google_refresh_token'] ) ) : ?>
-							<span class="mp-agenda-badge mp-agenda-badge-success">✅ <?php esc_html_e( 'Connecté à Google Agenda', 'mp-agenda' ); ?></span>
+						<?php if ( $mp_tech_has_refresh && $mp_tech_token_valid ) : ?>
+							<span class="mp-agenda-badge mp-agenda-badge-success">
+								✅ <?php echo esc_html( sprintf( __( 'Connecté — Token valide jusqu\'au %s', 'mp-agenda' ), wp_date( 'd/m/Y H:i', $mp_tech_expires_ts ) ) ); ?>
+							</span>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+								<?php wp_nonce_field( 'mp_agenda_google_disconnect' ); ?>
+								<input type="hidden" name="action" value="mp_agenda_google_disconnect" />
+								<input type="hidden" name="technician_id" value="<?php echo esc_attr( $mp_tech['id'] ); ?>" />
+								<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
+							</form>
+						<?php elseif ( $mp_tech_has_refresh && ! $mp_tech_token_valid ) : ?>
+							<span class="mp-agenda-badge mp-agenda-badge-warning">
+								⚠️ <?php esc_html_e( 'Token expiré — Renouvellement automatique au prochain appel', 'mp-agenda' ); ?>
+							</span>
 							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
 								<?php wp_nonce_field( 'mp_agenda_google_disconnect' ); ?>
 								<input type="hidden" name="action" value="mp_agenda_google_disconnect" />
@@ -170,6 +187,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 								<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
 							</form>
 						<?php elseif ( $mp_google_ready ) : ?>
+							<span class="mp-agenda-badge mp-agenda-badge-danger">❌ <?php esc_html_e( 'Déconnecté — Reconnexion nécessaire', 'mp-agenda' ); ?></span>
 							<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=mp_agenda_google_connect&technician_id=' . $mp_tech['id'] ), 'mp_agenda_google_connect' ) ); ?>">
 								<?php esc_html_e( 'Connecter Google Agenda', 'mp-agenda' ); ?>
 							</a>

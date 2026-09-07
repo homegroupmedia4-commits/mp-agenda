@@ -226,6 +226,8 @@
 .mp-agenda-badge-cancelled { background: #f1f5f9; color: var(--mp-text-secondary); }
 .mp-agenda-badge-completed { background: #dbeafe; color: var(--mp-primary-dark); }
 .mp-agenda-badge-gray { background: #f1f5f9; color: var(--mp-text-secondary); }
+.mp-agenda-badge-warning { background: #fef3c7; color: var(--mp-warning); }
+.mp-agenda-badge-danger { background: #fee2e2; color: var(--mp-danger); }
 
 /* Types d'intervention */
 .mp-agenda-type-row {

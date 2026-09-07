@@ -4,7 +4,7 @@ Tags: rendez-vous, planning, calendrier, google agenda, réservation
 Requires at least: 6.4
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.2.2
+Stable tag: 1.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,14 @@ Non, la synchronisation Google Agenda est optionnelle. Le plugin fonctionne plei
 Oui, la page "Commerciaux" permet d'ajouter, modifier ou supprimer autant de commerciaux que nécessaire.
 
 == Changelog ==
+
+= 1.3.0 =
+* Ajout : gestion ultra-robuste des tokens Google — renouvellement anticipé (5 min avant expiration), 2 réessais automatiques en cas d'échec réseau temporaire, et déconnexion propre + email d'alerte à l'admin si Google rejette définitivement le refresh_token (accès révoqué, ou expiration au bout de 7 jours en mode "Testing" non publié). Toute la synchro passe désormais par cette nouvelle méthode ensure_valid_token().
+* Ajout : avertissement dans Réglages > Google API expliquant le mode "Testing" de Google Cloud (tokens à 7 jours) et comment passer en Production pour des tokens permanents.
+* Ajout : vérification temps réel des disponibilités via l'API Google FreeBusy (nouvelle méthode get_freebusy(), cache 2 minutes) en complément des RDV/créneaux bloqués déjà en base — utile pour un événement Google très récent que la synchro périodique n'a pas encore importé. Le formulaire client n'est jamais bloqué par un échec Google : au moindre souci, repli silencieux sur les données en base.
+* Ajout : double vérification FreeBusy au moment de la réservation (book_appointment()), en plus du contrôle en base, pour éviter un double-booking de dernière minute.
+* Ajout : statut détaillé du token de chaque commercial dans MP Agenda > Commerciaux (connecté avec date d'expiration, expiré avec renouvellement automatique annoncé, ou déconnecté avec bouton de reconnexion).
+* Ajout : vérification quotidienne automatique des tokens (cron mp_agenda_google_token_check_cron) pour détecter une déconnexion Google avant qu'elle n'affecte un RDV.
 
 = 1.2.2 =
 * Correctif : une réservation en ligne dont l'écriture en base échouait silencieusement (INSERT SQL en échec, ex. colonne manquante) pouvait renvoyer un ID de rendez-vous périmé ou erroné, provoquant l'absence d'email ou l'envoi de notifications pour le mauvais rendez-vous. save_appointment() vérifie désormais le résultat de l'INSERT/UPDATE, et book_appointment() renvoie une erreur explicite au client au lieu de continuer silencieusement.

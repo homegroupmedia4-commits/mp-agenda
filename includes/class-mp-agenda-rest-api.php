@@ -657,7 +657,59 @@ class MP_Agenda_REST_API {
 
 		$slots = $this->compute_available_slots( $technician, $date, $duration );
 
+		// Vérification temps réel via Google FreeBusy, en complément des RDV et
+		// blocked_slots déjà pris en compte ci-dessus (utile pour un événement
+		// Google très récent que la synchro périodique n'a pas encore importé).
+		// get_freebusy() a son propre repli silencieux ([] au moindre souci) : si
+		// Google échoue, les créneaux calculés depuis la BDD restent inchangés —
+		// le formulaire client n'est donc jamais bloqué par un souci Google.
+		if ( ! empty( $technician['google_refresh_token'] ) ) {
+			$google_sync  = new MP_Agenda_Google_Sync();
+			$busy_periods = $google_sync->get_freebusy( $technician, $date );
+
+			if ( ! empty( $busy_periods ) ) {
+				$slots = $this->filter_slots_by_freebusy( $slots, $date, $duration, $busy_periods );
+			}
+		}
+
 		return new WP_REST_Response( array( 'date' => $date, 'slots' => $slots ), 200 );
+	}
+
+	/**
+	 * Retire d'une liste de créneaux (format H:i) ceux qui chevauchent une
+	 * période "busy" retournée par MP_Agenda_Google_Sync::get_freebusy().
+	 *
+	 * @param array  $slots        Créneaux disponibles (format H:i).
+	 * @param string $date         Date au format Y-m-d.
+	 * @param int    $duration     Durée du créneau en minutes.
+	 * @param array  $busy_periods Périodes occupées array( 'start' => 'Y-m-d H:i:s', 'end' => 'Y-m-d H:i:s' ).
+	 * @return array
+	 */
+	private function filter_slots_by_freebusy( $slots, $date, $duration, $busy_periods ) {
+		return array_values(
+			array_filter(
+				$slots,
+				function ( $time ) use ( $date, $duration, $busy_periods ) {
+					$slot_start = DateTime::createFromFormat( 'Y-m-d H:i', $date . ' ' . $time );
+					if ( ! $slot_start ) {
+						return true;
+					}
+					$slot_end = clone $slot_start;
+					$slot_end->modify( '+' . $duration . ' minutes' );
+
+					foreach ( $busy_periods as $period ) {
+						$busy_start = new DateTime( $period['start'] );
+						$busy_end   = new DateTime( $period['end'] );
+
+						if ( $slot_start < $busy_end && $slot_end > $busy_start ) {
+							return false;
+						}
+					}
+
+					return true;
+				}
+			)
+		);
 	}
 
 	/**
@@ -791,6 +843,28 @@ class MP_Agenda_REST_API {
 
 		if ( ! MP_Agenda_DB::is_slot_available( $technician_id, $start_dt->format( 'Y-m-d H:i:s' ), $end_dt->format( 'Y-m-d H:i:s' ) ) ) {
 			return new WP_Error( 'mp_agenda_slot_taken', __( 'Ce créneau n\'est plus disponible. Merci de choisir un autre horaire.', 'mp-agenda' ), array( 'status' => 409 ) );
+		}
+
+		// Double vérification temps réel via Google FreeBusy, en plus du check BDD
+		// ci-dessus (utile si un événement a été ajouté à l'instant dans Google
+		// Agenda, pas encore remonté par la synchro périodique). Si l'appel Google
+		// échoue pour une raison quelconque, on ne bloque JAMAIS la réservation —
+		// get_freebusy() retourne alors [] et la boucle ci-dessous ne trouve
+		// simplement aucun conflit.
+		if ( ! empty( $technician['google_refresh_token'] ) ) {
+			$google_sync  = new MP_Agenda_Google_Sync();
+			$busy_periods = $google_sync->get_freebusy( $technician, $date );
+
+			foreach ( $busy_periods as $period ) {
+				$busy_start = new DateTime( $period['start'] );
+				$busy_end   = new DateTime( $period['end'] );
+
+				if ( $start_dt < $busy_end && $end_dt > $busy_start ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+					error_log( sprintf( '[MP Agenda] book_appointment: conflit détecté via Google FreeBusy pour tech_id=%d sur %s %s-%s', $technician_id, $date, $start_dt->format( 'H:i' ), $end_dt->format( 'H:i' ) ) );
+					return new WP_Error( 'slot_unavailable', __( 'Ce créneau n\'est plus disponible. Veuillez en choisir un autre.', 'mp-agenda' ), array( 'status' => 409 ) );
+				}
+			}
 		}
 
 		$data = array(

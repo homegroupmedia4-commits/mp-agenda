@@ -40,11 +40,15 @@ class MP_Agenda_Activator {
 	 * @return void
 	 */
 	public static function maybe_upgrade() {
-		// Toujours ré-exécuter dbDelta + les ALTER TABLE de colonnes : ces opérations sont
-		// idempotentes et permettent de rattraper un schéma manquant (table ou colonne
-		// jamais créée suite à un échec silencieux) même si mp_agenda_db_version est déjà
-		// à jour. Ne pas gater ceci derrière le check de version ci-dessous.
+		// Toujours ré-exécuter dbDelta + les ALTER TABLE de colonnes, ainsi que la
+		// (re)planification des cron : ces opérations sont idempotentes
+		// (wp_next_scheduled() protège déjà schedule_cron()) et permettent de
+		// rattraper un schéma ou un cron manquant (ex. cron ajouté par une mise à
+		// jour déployée par simple remplacement de fichiers, sans passer par
+		// désactivation/réactivation du plugin) même si mp_agenda_db_version est
+		// déjà à jour. Ne pas gater ceci derrière le check de version ci-dessous.
 		self::create_tables();
+		self::schedule_cron();
 
 		if ( get_option( 'mp_agenda_db_version' ) === MP_AGENDA_DB_VERSION ) {
 			return;
@@ -397,13 +401,18 @@ class MP_Agenda_Activator {
 	}
 
 	/**
-	 * Planifie la tâche cron de synchronisation Google Agenda (toutes les 5 minutes).
+	 * Planifie la tâche cron de synchronisation Google Agenda (toutes les 5 minutes)
+	 * ainsi que la vérification quotidienne des tokens (MP_Agenda_Google_Sync::check_all_tokens()).
 	 *
 	 * @return void
 	 */
 	private static function schedule_cron() {
 		if ( ! wp_next_scheduled( 'mp_agenda_google_sync_cron' ) ) {
 			wp_schedule_event( time(), 'mp_agenda_five_minutes', 'mp_agenda_google_sync_cron' );
+		}
+
+		if ( ! wp_next_scheduled( 'mp_agenda_google_token_check_cron' ) ) {
+			wp_schedule_event( time(), 'daily', 'mp_agenda_google_token_check_cron' );
 		}
 	}
 }
