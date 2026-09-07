@@ -400,11 +400,15 @@ class MP_Agenda_Google_Sync {
 	 * Synchronise le calendrier Google d'un technicien vers les tables locales.
 	 *
 	 * @param array $technician Données du technicien.
-	 * @param bool  $full_sync  Si true, ignore le timestamp de dernière synchro
-	 *                          stocké et interroge Google sur les 30 derniers
-	 *                          jours (synchro manuelle "🔄 Synchroniser Google").
-	 *                          Si false, n'interroge Google que depuis le dernier
-	 *                          passage (comportement incrémental du cron).
+	 * @param bool  $full_sync  Si true (synchro manuelle "🔄 Synchroniser Google"),
+	 *                          repart entièrement à zéro : le timestamp/syncToken
+	 *                          stocké est supprimé et la requête n'utilise jamais
+	 *                          updatedMin (qui renvoie une erreur 410
+	 *                          "updatedMinTooLongAgo" passé un certain délai), mais
+	 *                          une fenêtre temporelle explicite timeMin/timeMax.
+	 *                          Si false (cron), la requête reste incrémentale via
+	 *                          updatedMin, avec repli automatique sur la même
+	 *                          fenêtre temporelle en cas de 410.
 	 * @return void
 	 */
 	private function sync_technician( $technician, $full_sync = false ) {
@@ -422,51 +426,56 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$calendar_id     = $technician['google_calendar_id'] ?: 'primary';
-		$option_key      = 'mp_agenda_google_last_sync_' . $technician['id'];
-		$thirty_days_ago = gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-30 days' ) );
+		$calendar_id = $technician['google_calendar_id'] ?: 'primary';
+		$option_key  = 'mp_agenda_google_last_sync_' . $technician['id'];
+		$now         = gmdate( 'Y-m-d\TH:i:s\Z' );
 
 		if ( $full_sync ) {
-			// Synchro manuelle : on ignore volontairement le timestamp stocké pour
-			// récupérer TOUS les événements récents, y compris ceux créés avant la
-			// dernière synchro (updatedMin exclurait sinon un événement Google créé
-			// puis jamais re-modifié depuis, ce qui donnait "items": [] en boucle).
-			$updated_min = $thirty_days_ago;
-			$this->log( sprintf( 'sync_technician tech_id=%d : full_sync=true — updatedMin forcé à %s (30 jours) au lieu du timestamp stocké.', $technician['id'], $updated_min ) );
+			// Synchro manuelle : on ignore délibérément tout état de synchro
+			// précédent. updatedMin n'est jamais envoyé ici — Google y répond par
+			// une erreur 410 "updatedMinTooLongAgo" au-delà d'un certain délai —
+			// on interroge donc une fenêtre temporelle explicite à la place.
+			delete_option( $option_key );
+			$this->log( sprintf( 'sync_technician tech_id=%d : full_sync=true — syncToken/timestamp stocké supprimé, requête sans updatedMin (timeMin/timeMax).', $technician['id'] ) );
+			$params = $this->build_time_window_params();
 		} else {
 			$last_sync   = get_option( $option_key );
-			$updated_min = $last_sync ? $last_sync : $thirty_days_ago;
+			$updated_min = $last_sync ? $last_sync : gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-30 days' ) );
+			$params      = array(
+				'singleEvents' => 'true',
+				'updatedMin'   => $updated_min,
+				'showDeleted'  => 'true',
+				'maxResults'   => 250,
+			);
 		}
 
-		$now = gmdate( 'Y-m-d\TH:i:s\Z' );
+		$result = $this->request_google_events( $calendar_id, $access_token, $params );
 
-		$params = array(
-			'singleEvents' => 'true',
-			'updatedMin'   => $updated_min,
-			'showDeleted'  => 'true',
-			'maxResults'   => 250,
-		);
-
-		$url = self::API_BASE . "/calendars/{$calendar_id}/events?" . http_build_query( $params );
-		$this->log( 'Google API URL: ' . $url );
-
-		$response = wp_remote_get(
-			$url,
-			array( 'headers' => array( 'Authorization' => 'Bearer ' . $access_token ) )
-		);
-
-		if ( is_wp_error( $response ) ) {
-			$this->log( sprintf( 'sync_technician tech_id=%d : erreur requête Google — %s', $technician['id'], $response->get_error_message() ) );
+		if ( isset( $result['error'] ) ) {
+			$this->log( sprintf( 'sync_technician tech_id=%d : erreur requête Google — %s', $technician['id'], $result['error']->get_error_message() ) );
 			return;
 		}
 
-		$code     = wp_remote_retrieve_response_code( $response );
-		$raw_body = wp_remote_retrieve_body( $response );
+		if ( ! $full_sync && 410 === $result['code'] ) {
+			// Repli recommandé par Google : un 410 Gone sur updatedMin signifie
+			// qu'il est trop ancien/invalide pour une synchro incrémentale. On
+			// oublie le timestamp stocké et on repart sur une fenêtre temporelle,
+			// exactement comme en full_sync.
+			$this->log( sprintf( 'sync_technician tech_id=%d : Google a renvoyé 410 (updatedMinTooLongAgo) — suppression du syncToken/timestamp stocké et nouvelle requête sans updatedMin.', $technician['id'] ) );
+			delete_option( $option_key );
+			$params = $this->build_time_window_params();
+			$result = $this->request_google_events( $calendar_id, $access_token, $params );
 
-		$this->log( 'Google API response code: ' . $code );
-		$this->log( 'Google API response body: ' . substr( $raw_body, 0, 500 ) );
+			if ( isset( $result['error'] ) ) {
+				$this->log( sprintf( 'sync_technician tech_id=%d : erreur requête Google (après repli 410) — %s', $technician['id'], $result['error']->get_error_message() ) );
+				return;
+			}
+		}
 
-		if ( (int) $code >= 400 ) {
+		$code     = $result['code'];
+		$raw_body = $result['raw_body'];
+
+		if ( $code >= 400 ) {
 			$this->log( sprintf( 'sync_technician tech_id=%d : réponse d\'erreur HTTP %d de Google, synchro annulée pour ce technicien.', $technician['id'], $code ) );
 			return;
 		}
@@ -474,7 +483,7 @@ class MP_Agenda_Google_Sync {
 		$body = json_decode( $raw_body, true );
 
 		if ( empty( $body['items'] ) || ! is_array( $body['items'] ) ) {
-			$this->log( sprintf( 'Events found: 0 (updatedMin=%s, calendar_id=%s)', $updated_min, $calendar_id ) );
+			$this->log( sprintf( 'Events found: 0 (calendar_id=%s, params=%s)', $calendar_id, wp_json_encode( $params ) ) );
 			update_option( $option_key, $now );
 			return;
 		}
@@ -498,6 +507,58 @@ class MP_Agenda_Google_Sync {
 		}
 
 		update_option( $option_key, $now );
+	}
+
+	/**
+	 * Construit les paramètres de requête events.list sans updatedMin, filtrés sur
+	 * une fenêtre temporelle explicite (30 jours dans le passé, 60 jours dans le
+	 * futur). Utilisé en synchro manuelle (full_sync) et en repli après une
+	 * erreur 410 "updatedMinTooLongAgo" côté cron.
+	 *
+	 * @return array
+	 */
+	private function build_time_window_params() {
+		return array(
+			'singleEvents' => 'true',
+			'timeMin'      => gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '-30 days' ) ),
+			'timeMax'      => gmdate( 'Y-m-d\TH:i:s\Z', strtotime( '+60 days' ) ),
+			'showDeleted'  => 'true',
+			'maxResults'   => 250,
+		);
+	}
+
+	/**
+	 * Exécute la requête GET events.list vers l'API Google Calendar et journalise
+	 * l'URL appelée ainsi que le code/corps de la réponse à des fins de diagnostic.
+	 *
+	 * @param string $calendar_id  ID du calendrier Google.
+	 * @param string $access_token Jeton d'accès valide.
+	 * @param array  $params       Paramètres de requête (updatedMin OU timeMin/timeMax, etc.).
+	 * @return array Soit array( 'error' => WP_Error ), soit array( 'code' => int, 'raw_body' => string ).
+	 */
+	private function request_google_events( $calendar_id, $access_token, $params ) {
+		$url = self::API_BASE . "/calendars/{$calendar_id}/events?" . http_build_query( $params );
+		$this->log( 'Google API URL: ' . $url );
+
+		$response = wp_remote_get(
+			$url,
+			array( 'headers' => array( 'Authorization' => 'Bearer ' . $access_token ) )
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return array( 'error' => $response );
+		}
+
+		$code     = (int) wp_remote_retrieve_response_code( $response );
+		$raw_body = wp_remote_retrieve_body( $response );
+
+		$this->log( 'Google API response code: ' . $code );
+		$this->log( 'Google API response body: ' . substr( $raw_body, 0, 500 ) );
+
+		return array(
+			'code'     => $code,
+			'raw_body' => $raw_body,
+		);
 	}
 
 	/**
