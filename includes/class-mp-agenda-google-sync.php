@@ -20,6 +20,38 @@ class MP_Agenda_Google_Sync {
 	const SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events';
 
 	/**
+	 * Journal de diagnostic TEMPORAIRE de la dernière synchronisation Google -> Plugin,
+	 * accumulé par log() et renvoyé par force_google_sync() dans la réponse JSON pour
+	 * pouvoir déboguer depuis la console navigateur sans accès aux logs serveur.
+	 * À retirer une fois la stabilité confirmée en production.
+	 *
+	 * @var array
+	 */
+	private $debug_log = array();
+
+	/**
+	 * Ajoute une ligne au journal de diagnostic ET la trace dans le journal PHP (error_log).
+	 *
+	 * @param string $message Message à journaliser (sans préfixe).
+	 * @return void
+	 */
+	private function log( $message ) {
+		$line = '[MP Agenda] ' . $message;
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( $line );
+		$this->debug_log[] = $line;
+	}
+
+	/**
+	 * Retourne le journal de diagnostic accumulé lors du dernier sync_all()/sync_technician().
+	 *
+	 * @return array
+	 */
+	public function get_debug_log() {
+		return $this->debug_log;
+	}
+
+	/**
 	 * Enregistre les hooks (cron + admin-ajax OAuth).
 	 *
 	 * @return void
@@ -365,8 +397,16 @@ class MP_Agenda_Google_Sync {
 	 * @return void
 	 */
 	private function sync_technician( $technician ) {
+		$this->log( sprintf(
+			'sync_technician START for tech_id=%d, name=%s, calendar_id=%s',
+			$technician['id'],
+			$technician['name'] ?? '?',
+			$technician['google_calendar_id'] ?: '(vide, repli sur "primary")'
+		) );
+
 		$access_token = $this->get_valid_access_token( $technician );
 		if ( ! $access_token ) {
+			$this->log( sprintf( 'sync_technician tech_id=%d : impossible d\'obtenir un access_token valide (refresh_token absent/invalide) — synchro annulée.', $technician['id'] ) );
 			return;
 		}
 
@@ -383,39 +423,54 @@ class MP_Agenda_Google_Sync {
 			'maxResults'   => 250,
 		);
 
+		$url = self::API_BASE . "/calendars/{$calendar_id}/events?" . http_build_query( $params );
+		$this->log( 'Google API URL: ' . $url );
+
 		$response = wp_remote_get(
-			self::API_BASE . "/calendars/{$calendar_id}/events?" . http_build_query( $params ),
+			$url,
 			array( 'headers' => array( 'Authorization' => 'Bearer ' . $access_token ) )
 		);
 
 		if ( is_wp_error( $response ) ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( sprintf( '[MP Agenda] sync_technician(%d, calendar=%s) : erreur requête Google — %s', $technician['id'], $calendar_id, $response->get_error_message() ) );
+			$this->log( sprintf( 'sync_technician tech_id=%d : erreur requête Google — %s', $technician['id'], $response->get_error_message() ) );
 			return;
 		}
 
-		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+		$code     = wp_remote_retrieve_response_code( $response );
+		$raw_body = wp_remote_retrieve_body( $response );
+
+		$this->log( 'Google API response code: ' . $code );
+		$this->log( 'Google API response body: ' . substr( $raw_body, 0, 500 ) );
+
+		if ( (int) $code >= 400 ) {
+			$this->log( sprintf( 'sync_technician tech_id=%d : réponse d\'erreur HTTP %d de Google, synchro annulée pour ce technicien.', $technician['id'], $code ) );
+			return;
+		}
+
+		$body = json_decode( $raw_body, true );
 
 		if ( empty( $body['items'] ) || ! is_array( $body['items'] ) ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( sprintf( '[MP Agenda] sync_technician(%d, calendar=%s) : 0 événement reçu (updatedMin=%s).', $technician['id'], $calendar_id, $updated_min ) );
+			$this->log( sprintf( 'Events found: 0 (updatedMin=%s, calendar_id=%s)', $updated_min, $calendar_id ) );
 			update_option( $option_key, $now );
 			return;
 		}
 
-		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		error_log( sprintf(
-			'[MP Agenda] sync_technician(%d, calendar=%s) : %d événement(s) reçu(s) — %s',
-			$technician['id'],
-			$calendar_id,
-			count( $body['items'] ),
-			wp_json_encode( wp_list_pluck( $body['items'], 'summary' ) )
-		) );
+		$this->log( 'Events found: ' . count( $body['items'] ) );
 
 		foreach ( $body['items'] as $event ) {
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( sprintf( '[MP Agenda] reconcile_event appelé pour "%s" (id=%s)', $event['summary'] ?? '(sans titre)', $event['id'] ?? '?' ) );
-			$this->reconcile_event( $technician, $event );
+			$event_id = $event['id'] ?? '?';
+			$this->log( sprintf(
+				'Processing event: id=%s, summary=%s, start=%s, end=%s, status=%s',
+				$event_id,
+				$event['summary'] ?? '(sans titre)',
+				$event['start']['dateTime'] ?? ( $event['start']['date'] ?? '?' ),
+				$event['end']['dateTime'] ?? ( $event['end']['date'] ?? '?' ),
+				$event['status'] ?? '?'
+			) );
+
+			$this->log( sprintf( 'reconcile_event called for event %s', $event_id ) );
+			$result = $this->reconcile_event( $technician, $event );
+			$this->log( sprintf( 'reconcile_event result: %s', $result ) );
 		}
 
 		update_option( $option_key, $now );
@@ -426,27 +481,32 @@ class MP_Agenda_Google_Sync {
 	 *
 	 * @param array $technician Données du technicien.
 	 * @param array $event      Événement Google Agenda.
-	 * @return void
+	 * @return string Description du résultat (à des fins de diagnostic uniquement).
 	 */
 	private function reconcile_event( $technician, $event ) {
+		global $wpdb;
+
 		if ( empty( $event['id'] ) ) {
-			return;
+			return 'skipped: événement sans id';
 		}
+
+		$event_id = $event['id'];
 
 		// Événement supprimé côté Google : on supprime le RDV ou le créneau bloqué local.
 		if ( 'cancelled' === ( $event['status'] ?? '' ) ) {
-			$appointment = MP_Agenda_DB::get_appointment_by_google_id( $event['id'] );
+			$appointment = MP_Agenda_DB::get_appointment_by_google_id( $event_id );
+			$this->log( sprintf( 'Event %s: has matching appointment google_event_id? %s', $event_id, $appointment ? 'YES' : 'NO' ) );
 			if ( $appointment ) {
 				MP_Agenda_DB::save_appointment( array( 'status' => 'cancelled' ), $appointment['id'] );
-				return;
+				return 'skipped: appointment id=' . $appointment['id'] . ' marqué cancelled (événement Google annulé)';
 			}
-			MP_Agenda_DB::delete_blocked_slot_by_google_id( $event['id'] );
-			return;
+			MP_Agenda_DB::delete_blocked_slot_by_google_id( $event_id );
+			return 'skipped: blocked_slot supprimé (événement Google annulé)';
 		}
 
 		// Ignore les événements toute la journée (pas de créneau horaire exploitable).
 		if ( empty( $event['start']['dateTime'] ) || empty( $event['end']['dateTime'] ) ) {
-			return;
+			return 'skipped: événement toute la journée (pas de start/end.dateTime)';
 		}
 
 		// Les dates stockées en base (RDV et créneaux bloqués) sont toujours en heure
@@ -459,7 +519,8 @@ class MP_Agenda_Google_Sync {
 		$end   = ( new DateTime( $event['end']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
 
 		// Un événement déjà lié à un RDV créé depuis le plugin : on met juste à jour les horaires.
-		$appointment = MP_Agenda_DB::get_appointment_by_google_id( $event['id'] );
+		$appointment = MP_Agenda_DB::get_appointment_by_google_id( $event_id );
+		$this->log( sprintf( 'Event %s: has matching appointment google_event_id? %s', $event_id, $appointment ? 'YES' : 'NO' ) );
 		if ( $appointment ) {
 			MP_Agenda_DB::save_appointment(
 				array(
@@ -468,25 +529,39 @@ class MP_Agenda_Google_Sync {
 				),
 				$appointment['id']
 			);
-			return;
+			return 'updated appointment id=' . $appointment['id'];
 		}
 
 		// Événement créé/modifié directement dans Google Agenda : on bloque simplement le créneau
 		// (pas assez d'informations client pour créer un rendez-vous complet).
-		$blocked = MP_Agenda_DB::get_blocked_slot_by_google_id( $event['id'] );
-		$data    = array(
+		$blocked = MP_Agenda_DB::get_blocked_slot_by_google_id( $event_id );
+		$this->log( sprintf( 'Event %s: has matching blocked_slot google_event_id? %s', $event_id, $blocked ? 'YES' : 'NO' ) );
+
+		$data = array(
 			'technician_id'   => $technician['id'],
 			'start_datetime'  => $start,
 			'end_datetime'    => $end,
 			'reason'          => sanitize_text_field( $event['summary'] ?? __( 'Google Agenda', 'mp-agenda' ) ),
-			'google_event_id' => $event['id'],
+			'google_event_id' => $event_id,
 		);
 
 		if ( $blocked ) {
-			MP_Agenda_DB::update_blocked_slot_by_google_id( $event['id'], $data );
-		} else {
-			MP_Agenda_DB::create_blocked_slot( $data );
+			MP_Agenda_DB::update_blocked_slot_by_google_id( $event_id, $data );
+			$outcome = ( '' === $wpdb->last_error ) ? ( 'OK id=' . $blocked['id'] ) : ( 'FAIL: ' . $wpdb->last_error );
+			$this->log( sprintf( 'Event %s: $wpdb->update result: %s', $event_id, $outcome ) );
+			return 'updated blocked_slot id=' . $blocked['id'];
 		}
+
+		$this->log( sprintf( 'Event %s: creating new blocked_slot', $event_id ) );
+		$new_id  = MP_Agenda_DB::create_blocked_slot( $data );
+		$outcome = ( $new_id && '' === $wpdb->last_error ) ? ( 'OK id=' . $new_id ) : ( 'FAIL: ' . $wpdb->last_error );
+		$this->log( sprintf( 'Event %s: $wpdb->insert result: %s', $event_id, $outcome ) );
+
+		if ( ! $new_id ) {
+			return 'skipped: échec création blocked_slot — ' . $wpdb->last_error;
+		}
+
+		return 'created blocked_slot id=' . $new_id;
 	}
 
 	/* ---------------------------------------------------------------------

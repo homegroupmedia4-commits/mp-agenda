@@ -573,7 +573,13 @@
 
 				apiRequest( '/google/sync', 'POST' )
 					.then( function ( data ) {
-						console.log( '[MP Agenda] Synchronisation Google réussie.', data );
+						console.log( '[MP Agenda] Synchronisation Google réussie. Réponse complète :', data );
+						if ( data && Array.isArray( data.logs ) ) {
+							console.log( '[MP Agenda] Journal de synchronisation (' + data.logs.length + ' ligne(s)) :' );
+							data.logs.forEach( function ( line ) {
+								console.log( line );
+							} );
+						}
 						btn.disabled = false;
 						btn.textContent = originalText;
 						if ( statusEl ) {

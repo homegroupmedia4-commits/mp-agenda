@@ -411,6 +411,15 @@ class MP_Agenda_REST_API {
 
 		$items = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf(
+			'[MP Agenda] get_blocked_slots(from=%s, to=%s, technician_id=%d) : %d créneau(x) bloqué(s) retourné(s)',
+			$from,
+			$to,
+			$technician_id,
+			is_array( $items ) ? count( $items ) : 0
+		) );
+
 		return new WP_REST_Response( array( 'items' => $items ), 200 );
 	}
 
@@ -862,7 +871,17 @@ class MP_Agenda_REST_API {
 		$google_sync = new MP_Agenda_Google_Sync();
 		$google_sync->sync_all();
 
-		return new WP_REST_Response( array( 'success' => true ), 200 );
+		return new WP_REST_Response(
+			array(
+				'success' => true,
+				// Journal de diagnostic TEMPORAIRE de la synchro qui vient de tourner,
+				// pour pouvoir déboguer depuis la console navigateur sans accès aux logs
+				// serveur. Voir MP_Agenda_Google_Sync::log(). À retirer une fois la
+				// stabilité confirmée en production.
+				'logs'    => $google_sync->get_debug_log(),
+			),
+			200
+		);
 	}
 
 	/**
