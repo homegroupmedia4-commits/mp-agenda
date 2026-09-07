@@ -378,7 +378,13 @@ class MP_Agenda_DB {
 		$data['updated_at'] = current_time( 'mysql' );
 
 		if ( $id ) {
-			$wpdb->update( $table, $data, array( 'id' => absint( $id ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+			$updated = $wpdb->update( $table, $data, array( 'id' => absint( $id ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+
+			if ( false === $updated ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( sprintf( '[MP Agenda] save_appointment: échec UPDATE (id=%d) — %s', $id, $wpdb->last_error ) );
+			}
+
 			return absint( $id );
 		}
 
@@ -387,7 +393,18 @@ class MP_Agenda_DB {
 			$data['cancel_token'] = wp_generate_password( 32, false );
 		}
 
-		$wpdb->insert( $table, $data ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+		$inserted = $wpdb->insert( $table, $data ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+
+		if ( false === $inserted ) {
+			// L'INSERT a échoué (ex. colonne manquante suite à une migration pas encore
+			// passée) : $wpdb->insert_id ne serait pas fiable ici (il pourrait encore
+			// pointer vers un tout autre RDV inséré précédemment sur cette connexion),
+			// donc on renvoie explicitement 0 plutôt que de laisser l'appelant récupérer
+			// et notifier le mauvais rendez-vous.
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( '[MP Agenda] save_appointment: échec INSERT — %s', $wpdb->last_error ) );
+			return 0;
+		}
 
 		return (int) $wpdb->insert_id;
 	}

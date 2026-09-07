@@ -389,17 +389,32 @@ class MP_Agenda_Google_Sync {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( '[MP Agenda] sync_technician(%d, calendar=%s) : erreur requête Google — %s', $technician['id'], $calendar_id, $response->get_error_message() ) );
 			return;
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( empty( $body['items'] ) || ! is_array( $body['items'] ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( '[MP Agenda] sync_technician(%d, calendar=%s) : 0 événement reçu (updatedMin=%s).', $technician['id'], $calendar_id, $updated_min ) );
 			update_option( $option_key, $now );
 			return;
 		}
 
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf(
+			'[MP Agenda] sync_technician(%d, calendar=%s) : %d événement(s) reçu(s) — %s',
+			$technician['id'],
+			$calendar_id,
+			count( $body['items'] ),
+			wp_json_encode( wp_list_pluck( $body['items'], 'summary' ) )
+		) );
+
 		foreach ( $body['items'] as $event ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( '[MP Agenda] reconcile_event appelé pour "%s" (id=%s)', $event['summary'] ?? '(sans titre)', $event['id'] ?? '?' ) );
 			$this->reconcile_event( $technician, $event );
 		}
 
@@ -434,8 +449,14 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$start = gmdate( 'Y-m-d H:i:s', strtotime( $event['start']['dateTime'] ) );
-		$end   = gmdate( 'Y-m-d H:i:s', strtotime( $event['end']['dateTime'] ) );
+		// Les dates stockées en base (RDV et créneaux bloqués) sont toujours en heure
+		// locale du site (voir to_rfc3339(), qui fait l'inverse avec wp_timezone()).
+		// gmdate( 'Y-m-d H:i:s', strtotime( ... ) ) convertirait ici en UTC, ce qui
+		// décale l'événement importé de Google (ex. +1h/+2h en France) et peut le
+		// faire apparaître sur un autre jour, voire hors des horaires de travail —
+		// il semble alors "absent" du planning alors qu'il a bien été synchronisé.
+		$start = ( new DateTime( $event['start']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
+		$end   = ( new DateTime( $event['end']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
 
 		// Un événement déjà lié à un RDV créé depuis le plugin : on met juste à jour les horaires.
 		$appointment = MP_Agenda_DB::get_appointment_by_google_id( $event['id'] );

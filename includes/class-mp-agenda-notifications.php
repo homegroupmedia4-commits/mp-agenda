@@ -22,6 +22,20 @@ class MP_Agenda_Notifications {
 	public function __construct() {
 		add_action( 'wp_ajax_nopriv_mp_agenda_cancel_appointment', array( $this, 'handle_public_cancellation' ) );
 		add_action( 'wp_ajax_mp_agenda_cancel_appointment', array( $this, 'handle_public_cancellation' ) );
+		add_action( 'wp_mail_failed', array( $this, 'log_mail_failure' ) );
+	}
+
+	/**
+	 * Journalise les échecs d'envoi de wp_mail() (ex. SMTP indisponible, "From"
+	 * refusé par l'hébergeur). wp_mail() échoue silencieusement par défaut : sans ce
+	 * log, un email non envoyé est indiscernable d'un email envoyé mais jamais reçu.
+	 *
+	 * @param WP_Error $error Erreur remontée par PHPMailer.
+	 * @return void
+	 */
+	public function log_mail_failure( $error ) {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[MP Agenda] wp_mail a échoué : ' . $error->get_error_message() );
 	}
 
 	/**

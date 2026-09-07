@@ -735,6 +735,9 @@ class MP_Agenda_REST_API {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function book_appointment( WP_REST_Request $request ) {
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[MP Agenda] book_appointment called' );
+
 		$technician_id = absint( $request->get_param( 'technician_id' ) );
 		$date          = sanitize_text_field( (string) $request->get_param( 'date' ) );
 		$time          = sanitize_text_field( (string) $request->get_param( 'time' ) );
@@ -798,7 +801,21 @@ class MP_Agenda_REST_API {
 		);
 
 		$id = MP_Agenda_DB::save_appointment( $data );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf( '[MP Agenda] appointment created id=%d', $id ) );
+
+		if ( ! $id ) {
+			// L'INSERT a échoué côté base de données (voir les logs de
+			// MP_Agenda_DB::save_appointment pour la cause exacte, ex. colonne
+			// manquante suite à une migration pas encore passée). On ne doit
+			// surtout pas continuer : il n'y a pas de RDV à notifier, et tenter de
+			// deviner un ID renverrait potentiellement un tout autre rendez-vous.
+			return new WP_Error( 'mp_agenda_save_failed', __( 'Une erreur est survenue lors de l\'enregistrement du rendez-vous, merci de réessayer.', 'mp-agenda' ), array( 'status' => 500 ) );
+		}
+
 		$appointment = MP_Agenda_DB::get_appointment( $id );
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[MP Agenda] appointment fetched: ' . ( $appointment ? 'OK' : 'NULL' ) );
 
 		if ( ! $appointment ) {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -807,8 +824,14 @@ class MP_Agenda_REST_API {
 			$google_sync = new MP_Agenda_Google_Sync();
 			$google_sync->push_appointment( $appointment );
 
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[MP Agenda] sending notifications...' );
+
 			$notifications = new MP_Agenda_Notifications();
 			$notifications->send_appointment_notifications( $appointment );
+
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[MP Agenda] notifications sent' );
 		}
 
 		return new WP_REST_Response(
