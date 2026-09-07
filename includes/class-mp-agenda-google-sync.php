@@ -589,19 +589,33 @@ class MP_Agenda_Google_Sync {
 			return 'skipped: blocked_slot supprimé (événement Google annulé)';
 		}
 
-		// Ignore les événements toute la journée (pas de créneau horaire exploitable).
-		if ( empty( $event['start']['dateTime'] ) || empty( $event['end']['dateTime'] ) ) {
-			return 'skipped: événement toute la journée (pas de start/end.dateTime)';
+		if ( ! empty( $event['start']['dateTime'] ) && ! empty( $event['end']['dateTime'] ) ) {
+			// Événement horodaté classique.
+			// Les dates stockées en base (RDV et créneaux bloqués) sont toujours en
+			// heure locale du site (voir to_rfc3339(), qui fait l'inverse avec
+			// wp_timezone()). gmdate( 'Y-m-d H:i:s', strtotime( ... ) ) convertirait
+			// ici en UTC, ce qui décale l'événement importé de Google (ex. +1h/+2h
+			// en France) et peut le faire apparaître sur un autre jour, voire hors
+			// des horaires de travail — il semble alors "absent" du planning alors
+			// qu'il a bien été synchronisé.
+			$start = ( new DateTime( $event['start']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
+			$end   = ( new DateTime( $event['end']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
+			$this->log( sprintf( 'Event %s: événement horodaté — start=%s, end=%s', $event_id, $start, $end ) );
+		} elseif ( ! empty( $event['start']['date'] ) && ! empty( $event['end']['date'] ) ) {
+			// Événement "toute la journée" : start.date/end.date sont de simples
+			// dates calendaires (YYYY-MM-DD), sans heure ni fuseau à convertir. Le
+			// end.date de Google est EXCLUSIF (un événement du 16/09 a
+			// end.date=17/09) : en le mappant tel quel sur "17/09 00:00:00", le
+			// créneau bloqué couvre exactement 16/09 00:00 -> 17/09 00:00, soit
+			// bien toute la journée du 16/09 (get_busy_slots()/is_slot_available()
+			// bloquent alors tous les créneaux de travail de cette journée).
+			$start = $event['start']['date'] . ' 00:00:00';
+			$end   = $event['end']['date'] . ' 00:00:00';
+			$this->log( sprintf( 'Event %s: événement toute la journée — start=%s, end=%s', $event_id, $start, $end ) );
+		} else {
+			// Ni dateTime ni date exploitables : rien à synchroniser.
+			return 'skipped: événement sans start/end exploitable (ni dateTime ni date)';
 		}
-
-		// Les dates stockées en base (RDV et créneaux bloqués) sont toujours en heure
-		// locale du site (voir to_rfc3339(), qui fait l'inverse avec wp_timezone()).
-		// gmdate( 'Y-m-d H:i:s', strtotime( ... ) ) convertirait ici en UTC, ce qui
-		// décale l'événement importé de Google (ex. +1h/+2h en France) et peut le
-		// faire apparaître sur un autre jour, voire hors des horaires de travail —
-		// il semble alors "absent" du planning alors qu'il a bien été synchronisé.
-		$start = ( new DateTime( $event['start']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
-		$end   = ( new DateTime( $event['end']['dateTime'] ) )->setTimezone( wp_timezone() )->format( 'Y-m-d H:i:s' );
 
 		// Un événement déjà lié à un RDV créé depuis le plugin : on met juste à jour les horaires.
 		$appointment = MP_Agenda_DB::get_appointment_by_google_id( $event_id );
