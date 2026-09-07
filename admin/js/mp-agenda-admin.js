@@ -382,7 +382,9 @@
 			] )
 				.then(
 					function ( results ) {
-						this.draw( range, results[ 0 ].items || [], results[ 1 ].items || [] );
+						var blockedSlots = results[ 1 ].items || [];
+						console.log( '[MP Agenda] Blocked slots received: ' + blockedSlots.length );
+						this.draw( range, results[ 0 ].items || [], blockedSlots );
 					}.bind( this )
 				)
 				.catch(
@@ -508,8 +510,28 @@
 						return;
 					}
 
+					var gridMinutes = totalSlots * 30;
 					var startMinutes = ( start.getHours() - self.startHour ) * 60 + start.getMinutes();
-					var endMinutes = ( end.getHours() - self.startHour ) * 60 + end.getMinutes();
+					var endMinutes;
+
+					if ( formatDate( end ) !== dateStr || end <= start ) {
+						// L'événement déborde sur le jour suivant (ex. créneau bloqué
+						// "toute la journée" 00:00 -> 00:00 le lendemain : end.getHours()
+						// vaut alors 0, exactement comme start, ce qui donnait une
+						// hauteur nulle et rendait le bloc invisible). On borne
+						// l'affichage à la fin de la grille visible de cette journée.
+						endMinutes = gridMinutes;
+					} else {
+						endMinutes = ( end.getHours() - self.startHour ) * 60 + end.getMinutes();
+					}
+
+					// Borne aussi le début : un événement commençant avant l'heure de
+					// départ de la grille (ex. RDV/blocage à 7h avec grille à partir de
+					// 8h) doit s'afficher depuis le haut plutôt que d'être poussé
+					// hors-écran par un top négatif.
+					startMinutes = Math.max( startMinutes, 0 );
+					endMinutes = Math.min( endMinutes, gridMinutes );
+
 					var top = ( startMinutes / 30 ) * self.slotHeight;
 					var height = Math.max( ( ( endMinutes - startMinutes ) / 30 ) * self.slotHeight, 20 );
 
