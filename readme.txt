@@ -4,7 +4,7 @@ Tags: rendez-vous, planning, calendrier, google agenda, réservation
 Requires at least: 6.4
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,13 @@ Non, la synchronisation Google Agenda est optionnelle. Le plugin fonctionne plei
 Oui, la page "Commerciaux" permet d'ajouter, modifier ou supprimer autant de commerciaux que nécessaire.
 
 == Changelog ==
+
+= 1.4.0 =
+* Ajout : choix du mode de synchronisation Google Agenda dans Réglages > Google API — Individuel (chaque commercial son propre agenda, comportement historique) ou Partagé (tous les commerciaux utilisent un seul agenda Google centralisé).
+* Ajout : en mode Partagé, connexion/déconnexion d'un unique agenda Google depuis MP Agenda > Commerciaux ("Agenda Google partagé"), avec affichage de l'email du compte connecté.
+* Ajout : nouvelle méthode centrale get_credentials_for() dans MP_Agenda_Google_Sync — tous les appels Google (renouvellement de token, push/pull de RDV, FreeBusy) passent désormais par elle et utilisent automatiquement les bons identifiants selon le mode configuré.
+* Le basculement entre les deux modes est instantané et ne supprime aucun jeton (individuels ou partagé) ni aucune donnée (RDV, créneaux bloqués) : seul le jeu de jetons utilisé change.
+* Le mode Individuel reste le comportement par défaut et fonctionne à l'identique des versions précédentes.
 
 = 1.3.0 =
 * Ajout : gestion ultra-robuste des tokens Google — renouvellement anticipé (5 min avant expiration), 2 réessais automatiques en cas d'échec réseau temporaire, et déconnexion propre + email d'alerte à l'admin si Google rejette définitivement le refresh_token (accès révoqué, ou expiration au bout de 7 jours en mode "Testing" non publié). Toute la synchro passe désormais par cette nouvelle méthode ensure_valid_token().

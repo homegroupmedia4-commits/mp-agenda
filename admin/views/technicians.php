@@ -9,11 +9,18 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$mp_technicians  = MP_Agenda_DB::get_technicians();
-$mp_showrooms    = MP_Agenda_DB::get_showrooms( true );
-$mp_editing_id   = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
-$mp_editing      = $mp_editing_id ? MP_Agenda_DB::get_technician( $mp_editing_id ) : null;
-$mp_google_ready = get_option( 'mp_agenda_google_client_id' ) && get_option( 'mp_agenda_google_client_secret' );
+$mp_technicians       = MP_Agenda_DB::get_technicians();
+$mp_showrooms         = MP_Agenda_DB::get_showrooms( true );
+$mp_editing_id        = isset( $_GET['edit'] ) ? absint( $_GET['edit'] ) : 0;
+$mp_editing           = $mp_editing_id ? MP_Agenda_DB::get_technician( $mp_editing_id ) : null;
+$mp_google_ready      = get_option( 'mp_agenda_google_client_id' ) && get_option( 'mp_agenda_google_client_secret' );
+$mp_google_sync_mode  = get_option( 'mp_agenda_google_sync_mode', 'individual' );
+$mp_is_shared_mode    = 'shared' === $mp_google_sync_mode;
+$mp_shared_email      = get_option( 'mp_agenda_shared_google_email', '' );
+$mp_shared_connected  = (bool) get_option( 'mp_agenda_shared_google_refresh_token' );
+$mp_shared_expires_at = get_option( 'mp_agenda_shared_google_token_expires_at' );
+$mp_shared_expires_ts = $mp_shared_expires_at ? strtotime( $mp_shared_expires_at ) : 0;
+$mp_shared_valid      = $mp_shared_connected && $mp_shared_expires_ts > time();
 
 $mp_days = array(
 	'mon' => __( 'Lundi', 'mp-agenda' ),
@@ -37,6 +44,10 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 		break;
 	}
 }
+
+// Le bouton "Forcer la synchronisation" n'a de sens que si le jeu de tokens
+// réellement utilisé par le mode actif (individuel ou partagé) est connecté.
+$mp_show_sync_button = $mp_is_shared_mode ? $mp_shared_connected : $mp_has_connected_technician;
 ?>
 <div class="wrap mp-agenda-wrap">
 	<h1 class="mp-agenda-title"><?php esc_html_e( 'Commerciaux', 'mp-agenda' ); ?></h1>
@@ -131,7 +142,7 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 		<div class="mp-agenda-card">
 			<div class="mp-agenda-card-header">
 				<h2><?php esc_html_e( 'Liste des commerciaux', 'mp-agenda' ); ?></h2>
-				<?php if ( $mp_has_connected_technician ) : ?>
+				<?php if ( $mp_show_sync_button ) : ?>
 					<span>
 						<button type="button" class="button mp-agenda-sync-google-btn">🔄 <?php esc_html_e( 'Forcer la synchronisation Google', 'mp-agenda' ); ?></button>
 						<span class="mp-agenda-sync-status"></span>
@@ -139,8 +150,46 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 				<?php endif; ?>
 			</div>
 
-			<?php if ( $mp_has_connected_technician ) : ?>
+			<?php if ( $mp_show_sync_button ) : ?>
 				<p class="mp-agenda-text-secondary"><?php esc_html_e( 'La synchronisation automatique tourne toutes les 5 minutes via le cron WordPress. Sur certains hébergements, ce cron peut être retardé ou inactif : utilisez ce bouton pour forcer immédiatement la récupération des événements Google Agenda (RDV créés côté plugin ET créneaux bloqués créés directement dans Google Agenda).', 'mp-agenda' ); ?></p>
+			<?php endif; ?>
+
+			<?php if ( $mp_is_shared_mode ) : ?>
+				<div class="mp-agenda-shared-google-block">
+					<strong><?php esc_html_e( 'Agenda Google partagé', 'mp-agenda' ); ?></strong>
+
+					<?php if ( $mp_shared_connected && $mp_shared_valid ) : ?>
+						<div class="mp-agenda-shared-google-row">
+							<span class="mp-agenda-badge mp-agenda-badge-success">
+								✅ <?php echo esc_html( sprintf( __( 'Agenda partagé connecté à %s', 'mp-agenda' ), $mp_shared_email ? $mp_shared_email : __( '(email indisponible)', 'mp-agenda' ) ) ); ?>
+							</span>
+							<span class="mp-agenda-text-secondary"><?php echo esc_html( sprintf( __( 'Token valide jusqu\'au %s', 'mp-agenda' ), wp_date( 'd/m/Y H:i', $mp_shared_expires_ts ) ) ); ?></span>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+								<?php wp_nonce_field( 'mp_agenda_google_disconnect_shared' ); ?>
+								<input type="hidden" name="action" value="mp_agenda_google_disconnect_shared" />
+								<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
+							</form>
+						</div>
+					<?php elseif ( $mp_shared_connected && ! $mp_shared_valid ) : ?>
+						<div class="mp-agenda-shared-google-row">
+							<span class="mp-agenda-badge mp-agenda-badge-warning">⚠️ <?php esc_html_e( 'Token expiré — Renouvellement automatique au prochain appel', 'mp-agenda' ); ?></span>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+								<?php wp_nonce_field( 'mp_agenda_google_disconnect_shared' ); ?>
+								<input type="hidden" name="action" value="mp_agenda_google_disconnect_shared" />
+								<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
+							</form>
+						</div>
+					<?php elseif ( $mp_google_ready ) : ?>
+						<div class="mp-agenda-shared-google-row">
+							<span class="mp-agenda-text-secondary"><?php esc_html_e( 'Connectez l\'agenda partagé.', 'mp-agenda' ); ?></span>
+							<a class="button button-primary" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=mp_agenda_google_connect&shared=1' ), 'mp_agenda_google_connect' ) ); ?>">
+								<?php esc_html_e( 'Connecter l\'agenda partagé', 'mp-agenda' ); ?>
+							</a>
+						</div>
+					<?php else : ?>
+						<p class="mp-agenda-text-secondary"><?php esc_html_e( 'Configurez d\'abord l\'API Google dans les Réglages.', 'mp-agenda' ); ?></p>
+					<?php endif; ?>
+				</div>
 			<?php endif; ?>
 
 			<?php foreach ( $mp_technicians as $mp_tech ) : ?>
@@ -160,41 +209,47 @@ foreach ( $mp_technicians as $mp_tech_check ) {
 						</div>
 					</div>
 
-					<?php
-					$mp_tech_has_refresh = ! empty( $mp_tech['google_refresh_token'] );
-					$mp_tech_expires_ts  = ! empty( $mp_tech['google_token_expires_at'] ) ? strtotime( $mp_tech['google_token_expires_at'] ) : 0;
-					$mp_tech_token_valid = $mp_tech_expires_ts > time();
-					?>
-					<div class="mp-agenda-technician-google">
-						<?php if ( $mp_tech_has_refresh && $mp_tech_token_valid ) : ?>
-							<span class="mp-agenda-badge mp-agenda-badge-success">
-								✅ <?php echo esc_html( sprintf( __( 'Connecté — Token valide jusqu\'au %s', 'mp-agenda' ), wp_date( 'd/m/Y H:i', $mp_tech_expires_ts ) ) ); ?>
-							</span>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
-								<?php wp_nonce_field( 'mp_agenda_google_disconnect' ); ?>
-								<input type="hidden" name="action" value="mp_agenda_google_disconnect" />
-								<input type="hidden" name="technician_id" value="<?php echo esc_attr( $mp_tech['id'] ); ?>" />
-								<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
-							</form>
-						<?php elseif ( $mp_tech_has_refresh && ! $mp_tech_token_valid ) : ?>
-							<span class="mp-agenda-badge mp-agenda-badge-warning">
-								⚠️ <?php esc_html_e( 'Token expiré — Renouvellement automatique au prochain appel', 'mp-agenda' ); ?>
-							</span>
-							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
-								<?php wp_nonce_field( 'mp_agenda_google_disconnect' ); ?>
-								<input type="hidden" name="action" value="mp_agenda_google_disconnect" />
-								<input type="hidden" name="technician_id" value="<?php echo esc_attr( $mp_tech['id'] ); ?>" />
-								<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
-							</form>
-						<?php elseif ( $mp_google_ready ) : ?>
-							<span class="mp-agenda-badge mp-agenda-badge-danger">❌ <?php esc_html_e( 'Déconnecté — Reconnexion nécessaire', 'mp-agenda' ); ?></span>
-							<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=mp_agenda_google_connect&technician_id=' . $mp_tech['id'] ), 'mp_agenda_google_connect' ) ); ?>">
-								<?php esc_html_e( 'Connecter Google Agenda', 'mp-agenda' ); ?>
-							</a>
-						<?php else : ?>
-							<span class="mp-agenda-text-secondary"><?php esc_html_e( 'Configurez d\'abord l\'API Google dans les Réglages.', 'mp-agenda' ); ?></span>
-						<?php endif; ?>
-					</div>
+					<?php if ( $mp_is_shared_mode ) : ?>
+						<div class="mp-agenda-technician-google">
+							<span class="mp-agenda-text-secondary"><?php esc_html_e( 'Géré via l\'agenda Google partagé (voir ci-dessus).', 'mp-agenda' ); ?></span>
+						</div>
+					<?php else : ?>
+						<?php
+						$mp_tech_has_refresh = ! empty( $mp_tech['google_refresh_token'] );
+						$mp_tech_expires_ts  = ! empty( $mp_tech['google_token_expires_at'] ) ? strtotime( $mp_tech['google_token_expires_at'] ) : 0;
+						$mp_tech_token_valid = $mp_tech_expires_ts > time();
+						?>
+						<div class="mp-agenda-technician-google">
+							<?php if ( $mp_tech_has_refresh && $mp_tech_token_valid ) : ?>
+								<span class="mp-agenda-badge mp-agenda-badge-success">
+									✅ <?php echo esc_html( sprintf( __( 'Connecté — Token valide jusqu\'au %s', 'mp-agenda' ), wp_date( 'd/m/Y H:i', $mp_tech_expires_ts ) ) ); ?>
+								</span>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+									<?php wp_nonce_field( 'mp_agenda_google_disconnect' ); ?>
+									<input type="hidden" name="action" value="mp_agenda_google_disconnect" />
+									<input type="hidden" name="technician_id" value="<?php echo esc_attr( $mp_tech['id'] ); ?>" />
+									<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
+								</form>
+							<?php elseif ( $mp_tech_has_refresh && ! $mp_tech_token_valid ) : ?>
+								<span class="mp-agenda-badge mp-agenda-badge-warning">
+									⚠️ <?php esc_html_e( 'Token expiré — Renouvellement automatique au prochain appel', 'mp-agenda' ); ?>
+								</span>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="display:inline;">
+									<?php wp_nonce_field( 'mp_agenda_google_disconnect' ); ?>
+									<input type="hidden" name="action" value="mp_agenda_google_disconnect" />
+									<input type="hidden" name="technician_id" value="<?php echo esc_attr( $mp_tech['id'] ); ?>" />
+									<button type="submit" class="button button-link-delete"><?php esc_html_e( 'Déconnecter', 'mp-agenda' ); ?></button>
+								</form>
+							<?php elseif ( $mp_google_ready ) : ?>
+								<span class="mp-agenda-badge mp-agenda-badge-danger">❌ <?php esc_html_e( 'Déconnecté — Reconnexion nécessaire', 'mp-agenda' ); ?></span>
+								<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-ajax.php?action=mp_agenda_google_connect&technician_id=' . $mp_tech['id'] ), 'mp_agenda_google_connect' ) ); ?>">
+									<?php esc_html_e( 'Connecter Google Agenda', 'mp-agenda' ); ?>
+								</a>
+							<?php else : ?>
+								<span class="mp-agenda-text-secondary"><?php esc_html_e( 'Configurez d\'abord l\'API Google dans les Réglages.', 'mp-agenda' ); ?></span>
+							<?php endif; ?>
+						</div>
+					<?php endif; ?>
 
 					<div class="mp-agenda-technician-actions">
 						<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=mp-agenda-technicians&edit=' . $mp_tech['id'] ) ); ?>"><?php esc_html_e( 'Modifier', 'mp-agenda' ); ?></a>

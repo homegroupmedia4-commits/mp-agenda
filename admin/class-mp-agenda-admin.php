@@ -33,6 +33,7 @@ class MP_Agenda_Admin {
 		add_action( 'admin_post_mp_agenda_save_intervention_types', array( $this, 'handle_save_intervention_types' ) );
 		add_action( 'admin_post_mp_agenda_save_google_credentials', array( $this, 'handle_save_google_credentials' ) );
 		add_action( 'admin_post_mp_agenda_google_disconnect', array( $this, 'handle_google_disconnect' ) );
+		add_action( 'admin_post_mp_agenda_google_disconnect_shared', array( $this, 'handle_google_disconnect_shared' ) );
 		add_action( 'admin_post_mp_agenda_export_csv', array( $this, 'handle_export_csv' ) );
 	}
 
@@ -397,13 +398,21 @@ class MP_Agenda_Admin {
 		if ( isset( $_POST['google_client_secret'] ) ) {
 			update_option( 'mp_agenda_google_client_secret', sanitize_text_field( wp_unslash( $_POST['google_client_secret'] ) ) );
 		}
+		if ( isset( $_POST['google_sync_mode'] ) ) {
+			$mode = sanitize_key( wp_unslash( $_POST['google_sync_mode'] ) );
+			// Changer de mode ne touche à AUCUN jeton (individuel ou partagé) : on ne
+			// fait que changer quel jeu de jetons MP_Agenda_Google_Sync::get_credentials_for()
+			// utilisera ensuite. Voir aussi handle_google_disconnect() / handle_google_disconnect_shared(),
+			// qui restent les deux seuls points où des jetons sont réellement effacés.
+			update_option( 'mp_agenda_google_sync_mode', in_array( $mode, array( 'individual', 'shared' ), true ) ? $mode : 'individual' );
+		}
 
-		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-settings', 'mp_agenda_notice' => 'saved' ), admin_url( 'admin.php' ) ) );
+		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-settings', 'tab' => 'google', 'mp_agenda_notice' => 'saved' ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
 	/**
-	 * Déconnecte le compte Google d'un technicien.
+	 * Déconnecte le compte Google d'un technicien (mode individuel).
 	 *
 	 * @return void
 	 */
@@ -424,6 +433,27 @@ class MP_Agenda_Admin {
 			);
 			delete_option( 'mp_agenda_google_last_sync_' . $technician_id );
 		}
+
+		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-technicians', 'mp_agenda_notice' => 'disconnected' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Déconnecte l'agenda Google partagé (mode 'shared') — homologue de
+	 * handle_google_disconnect() pour les identifiants globaux au lieu de ceux
+	 * d'un technicien. Ne touche à aucun jeton individuel.
+	 *
+	 * @return void
+	 */
+	public function handle_google_disconnect_shared() {
+		$this->verify_request( 'mp_agenda_google_disconnect_shared' );
+
+		delete_option( 'mp_agenda_shared_google_access_token' );
+		delete_option( 'mp_agenda_shared_google_refresh_token' );
+		delete_option( 'mp_agenda_shared_google_token_expires_at' );
+		delete_option( 'mp_agenda_shared_google_calendar_id' );
+		delete_option( 'mp_agenda_shared_google_email' );
+		delete_option( 'mp_agenda_google_last_sync_shared' );
 
 		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-technicians', 'mp_agenda_notice' => 'disconnected' ), admin_url( 'admin.php' ) ) );
 		exit;

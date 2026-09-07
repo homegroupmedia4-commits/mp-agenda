@@ -15,6 +15,7 @@ $mp_gdpr_text                = get_option( 'mp_agenda_gdpr_text', '' );
 $mp_gdpr_retention           = get_option( 'mp_agenda_gdpr_retention_months', 24 );
 $mp_google_client_id         = get_option( 'mp_agenda_google_client_id', '' );
 $mp_google_secret            = get_option( 'mp_agenda_google_client_secret', '' );
+$mp_google_sync_mode         = get_option( 'mp_agenda_google_sync_mode', 'individual' );
 $mp_callback_url             = admin_url( 'admin-ajax.php?action=mp_agenda_google_callback' );
 $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general';
 ?>
@@ -102,6 +103,27 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
 			<?php wp_nonce_field( 'mp_agenda_save_google_credentials' ); ?>
 			<input type="hidden" name="action" value="mp_agenda_save_google_credentials" />
+
+			<div class="mp-agenda-field">
+				<label><?php esc_html_e( 'Mode de synchronisation Google Agenda', 'mp-agenda' ); ?></label>
+				<div class="mp-agenda-sync-mode-options">
+					<label class="mp-agenda-sync-mode-option">
+						<input type="radio" name="google_sync_mode" value="individual" <?php checked( $mp_google_sync_mode, 'individual' ); ?> />
+						<span class="mp-agenda-sync-mode-content">
+							<strong><?php esc_html_e( 'Individuel (recommandé)', 'mp-agenda' ); ?></strong>
+							<span><?php esc_html_e( 'Chaque commercial se connecte avec son propre compte Google. Ses RDV n\'apparaissent que dans son agenda personnel.', 'mp-agenda' ); ?></span>
+						</span>
+					</label>
+					<label class="mp-agenda-sync-mode-option">
+						<input type="radio" name="google_sync_mode" value="shared" <?php checked( $mp_google_sync_mode, 'shared' ); ?> />
+						<span class="mp-agenda-sync-mode-content">
+							<strong><?php esc_html_e( 'Partagé', 'mp-agenda' ); ?></strong>
+							<span><?php esc_html_e( 'Tous les commerciaux utilisent le même compte Google. Tous les RDV apparaissent dans un seul agenda centralisé.', 'mp-agenda' ); ?></span>
+						</span>
+					</label>
+				</div>
+				<p class="description"><?php esc_html_e( 'Basculer entre les deux modes est instantané et ne supprime aucune donnée ni aucun jeton déjà connecté : seul le jeu de jetons utilisé change.', 'mp-agenda' ); ?></p>
+			</div>
 
 			<div class="mp-agenda-field">
 				<label for="google_client_id"><?php esc_html_e( 'Client ID', 'mp-agenda' ); ?></label>

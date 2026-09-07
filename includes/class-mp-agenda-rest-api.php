@@ -663,8 +663,12 @@ class MP_Agenda_REST_API {
 		// get_freebusy() a son propre repli silencieux ([] au moindre souci) : si
 		// Google échoue, les créneaux calculés depuis la BDD restent inchangés —
 		// le formulaire client n'est donc jamais bloqué par un souci Google.
-		if ( ! empty( $technician['google_refresh_token'] ) ) {
-			$google_sync  = new MP_Agenda_Google_Sync();
+		// has_google_connected() (plutôt qu'une lecture directe de
+		// google_refresh_token) tient compte du mode de synchro configuré : en
+		// mode partagé, un technicien peut ne jamais s'être connecté
+		// individuellement tout en étant couvert par l'agenda partagé.
+		$google_sync = new MP_Agenda_Google_Sync();
+		if ( $google_sync->has_google_connected( $technician ) ) {
 			$busy_periods = $google_sync->get_freebusy( $technician, $date );
 
 			if ( ! empty( $busy_periods ) ) {
@@ -850,9 +854,10 @@ class MP_Agenda_REST_API {
 		// Agenda, pas encore remonté par la synchro périodique). Si l'appel Google
 		// échoue pour une raison quelconque, on ne bloque JAMAIS la réservation —
 		// get_freebusy() retourne alors [] et la boucle ci-dessous ne trouve
-		// simplement aucun conflit.
-		if ( ! empty( $technician['google_refresh_token'] ) ) {
-			$google_sync  = new MP_Agenda_Google_Sync();
+		// simplement aucun conflit. has_google_connected() tient compte du mode
+		// de synchro configuré (individuel ou partagé) — voir get_available_slots().
+		$google_sync = new MP_Agenda_Google_Sync();
+		if ( $google_sync->has_google_connected( $technician ) ) {
 			$busy_periods = $google_sync->get_freebusy( $technician, $date );
 
 			foreach ( $busy_periods as $period ) {

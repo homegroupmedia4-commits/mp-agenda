@@ -17,7 +17,7 @@ class MP_Agenda_Google_Sync {
 	const AUTH_URL  = 'https://accounts.google.com/o/oauth2/v2/auth';
 	const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 	const API_BASE  = 'https://www.googleapis.com/calendar/v3';
-	const SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events';
+	const SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email';
 
 	/**
 	 * Journal de diagnostic TEMPORAIRE de la dernière synchronisation Google -> Plugin,
@@ -78,17 +78,25 @@ class MP_Agenda_Google_Sync {
 		}
 		check_admin_referer( 'mp_agenda_google_connect' );
 
-		$technician_id = isset( $_GET['technician_id'] ) ? absint( $_GET['technician_id'] ) : 0;
+		// "Connecter l'agenda partagé" (mode 'shared') passe ?shared=1 au lieu d'un
+		// technician_id : les tokens obtenus sont alors stockés dans les options WP
+		// globales mp_agenda_shared_google_* au lieu d'une fiche technicien — voir
+		// handle_callback().
+		$is_shared     = ! empty( $_GET['shared'] );
+		$technician_id = $is_shared ? 0 : ( isset( $_GET['technician_id'] ) ? absint( $_GET['technician_id'] ) : 0 );
 		$client_id     = get_option( 'mp_agenda_google_client_id' );
 
-		if ( ! $technician_id || ! $client_id ) {
+		if ( ( ! $is_shared && ! $technician_id ) || ! $client_id ) {
 			wp_die( esc_html__( 'Configuration Google incomplète.', 'mp-agenda' ) );
 		}
+
+		$oauth_key = $is_shared ? 'shared' : $technician_id;
 
 		$state = wp_json_encode(
 			array(
 				'technician_id' => $technician_id,
-				'nonce'         => wp_create_nonce( 'mp_agenda_google_oauth_' . $technician_id ),
+				'shared'        => $is_shared,
+				'nonce'         => wp_create_nonce( 'mp_agenda_google_oauth_' . $oauth_key ),
 			)
 		);
 
@@ -123,13 +131,15 @@ class MP_Agenda_Google_Sync {
 		$code  = isset( $_GET['code'] ) ? sanitize_text_field( wp_unslash( $_GET['code'] ) ) : '';
 		$state = isset( $_GET['state'] ) ? json_decode( wp_unslash( $_GET['state'] ), true ) : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
-		if ( ! $code || ! is_array( $state ) || empty( $state['technician_id'] ) || empty( $state['nonce'] ) ) {
+		if ( ! $code || ! is_array( $state ) || empty( $state['nonce'] ) || ( empty( $state['shared'] ) && empty( $state['technician_id'] ) ) ) {
 			wp_die( esc_html__( 'Réponse Google invalide.', 'mp-agenda' ) );
 		}
 
-		$technician_id = absint( $state['technician_id'] );
+		$is_shared     = ! empty( $state['shared'] );
+		$technician_id = absint( $state['technician_id'] ?? 0 );
+		$oauth_key     = $is_shared ? 'shared' : $technician_id;
 
-		if ( ! wp_verify_nonce( $state['nonce'], 'mp_agenda_google_oauth_' . $technician_id ) ) {
+		if ( ! wp_verify_nonce( $state['nonce'], 'mp_agenda_google_oauth_' . $oauth_key ) ) {
 			wp_die( esc_html__( 'Session expirée, merci de recommencer la connexion.', 'mp-agenda' ) );
 		}
 
@@ -168,60 +178,210 @@ class MP_Agenda_Google_Sync {
 			$data['google_refresh_token'] = $this->encrypt( $body['refresh_token'] );
 		}
 
-		MP_Agenda_DB::save_technician( $data, $technician_id );
+		if ( $is_shared ) {
+			// Agenda partagé : les tokens vont dans des options WP globales, pas sur
+			// une fiche technicien — voir get_credentials_for()/save_credentials().
+			update_option( 'mp_agenda_shared_google_access_token', $data['google_access_token'] );
+			update_option( 'mp_agenda_shared_google_token_expires_at', $data['google_token_expires_at'] );
+			update_option( 'mp_agenda_shared_google_calendar_id', $data['google_calendar_id'] );
+			if ( isset( $data['google_refresh_token'] ) ) {
+				update_option( 'mp_agenda_shared_google_refresh_token', $data['google_refresh_token'] );
+			}
+
+			$email = $this->fetch_google_account_email( $body['access_token'] );
+			if ( $email ) {
+				update_option( 'mp_agenda_shared_google_email', $email );
+			}
+		} else {
+			MP_Agenda_DB::save_technician( $data, $technician_id );
+		}
 
 		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-technicians', 'mp_agenda_notice' => 'connected' ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
 
 	/**
-	 * Vérifie et renouvelle si besoin l'access_token d'un technicien, à appeler
-	 * AVANT tout appel à l'API Google (events.list, events.insert/patch/delete,
-	 * freeBusy, etc.) — aucun appel Google ne doit plus lire
-	 * google_access_token directement.
+	 * Récupère l'adresse email du compte Google qui vient de se connecter, pour
+	 * affichage "✅ Agenda partagé connecté à {email}" dans MP Agenda > Commerciaux.
+	 * Best-effort : ne fait jamais échouer la connexion OAuth elle-même, retourne
+	 * simplement une chaîne vide si le scope email n'a pas été accordé ou si la
+	 * requête échoue.
+	 *
+	 * @param string $access_token Access token fraîchement obtenu.
+	 * @return string
+	 */
+	private function fetch_google_account_email( $access_token ) {
+		$response = wp_remote_get(
+			'https://www.googleapis.com/oauth2/v2/userinfo',
+			array(
+				'headers' => array( 'Authorization' => 'Bearer ' . $access_token ),
+				'timeout' => 5,
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return '';
+		}
+
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		return $body['email'] ?? '';
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Mode de synchro (individuel / partagé) & identifiants
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Retourne le mode de synchro Google configuré dans Réglages → Google API.
+	 *
+	 * @return string 'individual' ou 'shared'.
+	 */
+	private function get_sync_mode() {
+		$mode = get_option( 'mp_agenda_google_sync_mode', 'individual' );
+		return 'shared' === $mode ? 'shared' : 'individual';
+	}
+
+	/**
+	 * Point d'entrée UNIQUE pour lire des identifiants Google (tokens +
+	 * calendar_id). Tout le reste du plugin doit passer par cette méthode —
+	 * ensure_valid_token(), push_appointment(), delete_event(), get_freebusy(),
+	 * sync_technician() — au lieu de lire google_access_token/google_refresh_token
+	 * directement sur un technicien, pour rester correct dans les deux modes :
+	 * - 'individual' (défaut, historique) : les colonnes du technicien passé en
+	 *   paramètre.
+	 * - 'shared' : les options WP globales de l'agenda partagé, identiques pour
+	 *   tous les commerciaux — $technician ne sert alors qu'au rattachement des
+	 *   blocked_slots créés et aux logs, pas aux identifiants eux-mêmes.
+	 *
+	 * Le tableau retourné a toujours la forme des colonnes technicien, pour que
+	 * le reste du code n'ait pas à savoir d'où viennent les identifiants.
+	 * Pendant en écriture : save_credentials().
+	 *
+	 * @param array $technician Données du technicien.
+	 * @return array{google_access_token:?string,google_refresh_token:?string,google_token_expires_at:?string,google_calendar_id:?string}
+	 */
+	private function get_credentials_for( $technician ) {
+		if ( 'shared' === $this->get_sync_mode() ) {
+			return array(
+				'google_access_token'     => get_option( 'mp_agenda_shared_google_access_token' ) ?: null,
+				'google_refresh_token'    => get_option( 'mp_agenda_shared_google_refresh_token' ) ?: null,
+				'google_token_expires_at' => get_option( 'mp_agenda_shared_google_token_expires_at' ) ?: null,
+				'google_calendar_id'      => get_option( 'mp_agenda_shared_google_calendar_id' ) ?: null,
+			);
+		}
+
+		return array(
+			'google_access_token'     => $technician['google_access_token'] ?? null,
+			'google_refresh_token'    => $technician['google_refresh_token'] ?? null,
+			'google_token_expires_at' => $technician['google_token_expires_at'] ?? null,
+			'google_calendar_id'      => $technician['google_calendar_id'] ?? null,
+		);
+	}
+
+	/**
+	 * Enregistre des identifiants Google mis à jour à l'endroit approprié selon
+	 * le mode de synchro — pendant en écriture de get_credentials_for().
+	 *
+	 * @param array $technician Technicien concerné (ignoré en mode 'shared').
+	 * @param array $data       Sous-ensemble de google_access_token / google_refresh_token /
+	 *                          google_token_expires_at / google_calendar_id à mettre à jour
+	 *                          (une valeur null supprime l'option / vide la colonne).
+	 * @return void
+	 */
+	private function save_credentials( $technician, $data ) {
+		if ( 'shared' !== $this->get_sync_mode() ) {
+			MP_Agenda_DB::save_technician( $data, $technician['id'] );
+			return;
+		}
+
+		$option_map = array(
+			'google_access_token'     => 'mp_agenda_shared_google_access_token',
+			'google_refresh_token'    => 'mp_agenda_shared_google_refresh_token',
+			'google_token_expires_at' => 'mp_agenda_shared_google_token_expires_at',
+			'google_calendar_id'      => 'mp_agenda_shared_google_calendar_id',
+		);
+
+		foreach ( $option_map as $field => $option_name ) {
+			if ( ! array_key_exists( $field, $data ) ) {
+				continue;
+			}
+			if ( null === $data[ $field ] ) {
+				delete_option( $option_name );
+			} else {
+				update_option( $option_name, $data[ $field ] );
+			}
+		}
+	}
+
+	/**
+	 * Indique si des identifiants Google exploitables (individuels ou
+	 * partagés, selon le mode configuré) sont disponibles pour ce technicien.
+	 * À utiliser par le reste du plugin (ex. MP_Agenda_REST_API) à la place
+	 * d'une lecture directe de google_refresh_token, qui ignorerait le mode
+	 * partagé.
+	 *
+	 * @param array $technician Données du technicien.
+	 * @return bool
+	 */
+	public function has_google_connected( $technician ) {
+		$credentials = $this->get_credentials_for( $technician );
+		return ! empty( $credentials['google_refresh_token'] );
+	}
+
+	/**
+	 * Vérifie et renouvelle si besoin l'access_token à utiliser pour ce
+	 * technicien (identifiants individuels ou partagés selon get_credentials_for()),
+	 * à appeler AVANT tout appel à l'API Google (events.list,
+	 * events.insert/patch/delete, freeBusy, etc.) — aucun appel Google ne doit
+	 * plus lire google_access_token directement.
 	 *
 	 * Renouvelle avec une marge de 5 minutes (pas seulement une fois le token
 	 * expiré) pour ne jamais démarrer un appel avec un token sur le point
 	 * d'expirer en cours de route. En cas d'échec réseau temporaire, réessaie
 	 * jusqu'à 2 fois avec 2 secondes d'attente. Si Google rejette carrément le
 	 * refresh_token (error=invalid_grant, ex. accès révoqué par l'utilisateur ou
-	 * expiration du mode "Testing" au bout de 7 jours), le technicien est
-	 * marqué déconnecté en BDD et l'admin WordPress est alerté par email — voir
-	 * disconnect_and_alert().
+	 * expiration du mode "Testing" au bout de 7 jours), les identifiants sont
+	 * marqués déconnectés (technicien ou agenda partagé) et l'admin WordPress
+	 * est alerté par email — voir disconnect_and_alert().
 	 *
 	 * @param array $technician Données du technicien (doit contenir au moins 'id').
 	 * @return string|false Access token déchiffré valide, ou false si impossible à obtenir.
 	 */
 	private function ensure_valid_token( $technician ) {
-		if ( empty( $technician['google_refresh_token'] ) ) {
+		$credentials = $this->get_credentials_for( $technician );
+
+		if ( empty( $credentials['google_refresh_token'] ) ) {
 			return false;
 		}
 
-		$expires_at = $technician['google_token_expires_at'] ? strtotime( $technician['google_token_expires_at'] ) : 0;
+		$expires_at = $credentials['google_token_expires_at'] ? strtotime( $credentials['google_token_expires_at'] ) : 0;
 
-		if ( $expires_at > time() + 5 * MINUTE_IN_SECONDS && ! empty( $technician['google_access_token'] ) ) {
-			return $this->decrypt( $technician['google_access_token'] );
+		if ( $expires_at > time() + 5 * MINUTE_IN_SECONDS && ! empty( $credentials['google_access_token'] ) ) {
+			return $this->decrypt( $credentials['google_access_token'] );
 		}
 
 		$max_attempts = 3; // 1 tentative initiale + 2 réessais.
+		$mode         = $this->get_sync_mode();
 
 		for ( $attempt = 1; $attempt <= $max_attempts; $attempt++ ) {
-			$result = $this->do_refresh_access_token( $technician );
+			$result = $this->do_refresh_access_token( $technician, $credentials );
 
 			if ( 'invalid_grant' === ( $result['error'] ?? '' ) ) {
-				$this->log( sprintf( 'ensure_valid_token tech_id=%d : refresh_token rejeté par Google (invalid_grant) — déconnexion et alerte admin.', $technician['id'] ) );
+				$this->log( sprintf( 'ensure_valid_token tech_id=%d (mode=%s) : refresh_token rejeté par Google (invalid_grant) — déconnexion et alerte admin.', $technician['id'] ?? 0, $mode ) );
 				$this->disconnect_and_alert( $technician );
 				return false;
 			}
 
 			if ( ! empty( $result['access_token'] ) ) {
-				$this->log( sprintf( 'ensure_valid_token tech_id=%d : access_token renouvelé (tentative %d/%d).', $technician['id'], $attempt, $max_attempts ) );
+				$this->log( sprintf( 'ensure_valid_token tech_id=%d (mode=%s) : access_token renouvelé (tentative %d/%d).', $technician['id'] ?? 0, $mode, $attempt, $max_attempts ) );
 				return $result['access_token'];
 			}
 
 			$this->log( sprintf(
-				'ensure_valid_token tech_id=%d : échec du renouvellement (tentative %d/%d) — %s',
-				$technician['id'],
+				'ensure_valid_token tech_id=%d (mode=%s) : échec du renouvellement (tentative %d/%d) — %s',
+				$technician['id'] ?? 0,
+				$mode,
 				$attempt,
 				$max_attempts,
 				$result['message'] ?? 'raison inconnue'
@@ -232,20 +392,22 @@ class MP_Agenda_Google_Sync {
 			}
 		}
 
-		$this->log( sprintf( 'ensure_valid_token tech_id=%d : échec définitif après %d tentatives (probable panne réseau temporaire côté Google).', $technician['id'], $max_attempts ) );
+		$this->log( sprintf( 'ensure_valid_token tech_id=%d (mode=%s) : échec définitif après %d tentatives (probable panne réseau temporaire côté Google).', $technician['id'] ?? 0, $mode, $max_attempts ) );
 		return false;
 	}
 
 	/**
 	 * Exécute une tentative de renouvellement d'access_token auprès de Google.
 	 * En cas de succès, enregistre immédiatement le nouvel access_token,
-	 * expires_at, et — si Google en a renvoyé un — le nouveau refresh_token.
+	 * expires_at, et — si Google en a renvoyé un — le nouveau refresh_token, à
+	 * l'endroit approprié selon le mode (via save_credentials()).
 	 *
-	 * @param array $technician Données du technicien.
+	 * @param array $technician  Données du technicien.
+	 * @param array $credentials Identifiants courants (voir get_credentials_for()).
 	 * @return array{access_token?:string,error?:string,message?:string}
 	 */
-	private function do_refresh_access_token( $technician ) {
-		$refresh_token = $this->decrypt( $technician['google_refresh_token'] );
+	private function do_refresh_access_token( $technician, $credentials ) {
+		$refresh_token = $this->decrypt( $credentials['google_refresh_token'] );
 
 		$response = wp_remote_post(
 			self::TOKEN_URL,
@@ -290,54 +452,71 @@ class MP_Agenda_Google_Sync {
 			$update['google_refresh_token'] = $this->encrypt( $body['refresh_token'] );
 		}
 
-		MP_Agenda_DB::save_technician( $update, $technician['id'] );
+		$this->save_credentials( $technician, $update );
 
 		return array( 'access_token' => $body['access_token'] );
 	}
 
 	/**
-	 * Déconnecte un technicien de Google (vide ses tokens en BDD, comme
-	 * disconnect_google()) et alerte l'admin WordPress par email pour qu'il le
-	 * reconnecte manuellement depuis MP Agenda → Commerciaux.
+	 * Déconnecte les identifiants Google en cours d'usage — technicien (mode
+	 * individuel) ou agenda partagé (mode 'shared'), via save_credentials() —
+	 * et alerte l'admin WordPress par email pour qu'il reconnecte manuellement
+	 * depuis MP Agenda → Commerciaux.
 	 *
-	 * @param array $technician Données du technicien.
+	 * @param array $technician Données du technicien concerné (mode individuel)
+	 *                          ou premier commercial actif (mode partagé, pour
+	 *                          les logs uniquement).
 	 * @return void
 	 */
 	private function disconnect_and_alert( $technician ) {
-		MP_Agenda_DB::save_technician(
+		$mode = $this->get_sync_mode();
+
+		$this->save_credentials(
+			$technician,
 			array(
 				'google_calendar_id'      => null,
 				'google_access_token'     => null,
 				'google_refresh_token'    => null,
 				'google_token_expires_at' => null,
-			),
-			$technician['id']
+			)
 		);
+
+		if ( 'shared' === $mode ) {
+			delete_option( 'mp_agenda_shared_google_email' );
+		}
 
 		$admin_email = get_option( 'admin_email' );
 		if ( ! $admin_email ) {
 			return;
 		}
 
-		$name    = $technician['name'] ?? ( '#' . $technician['id'] );
-		$subject = __( '[MP Agenda] Un commercial a été déconnecté de Google Agenda', 'mp-agenda' );
-		$message = sprintf(
-			/* translators: %s: nom du commercial */
-			__( '⚠️ Le commercial %s a été déconnecté de Google Agenda. Reconnectez-le dans MP Agenda → Commerciaux.', 'mp-agenda' ),
-			$name
-		);
+		if ( 'shared' === $mode ) {
+			$subject = __( '[MP Agenda] L\'agenda Google partagé a été déconnecté', 'mp-agenda' );
+			$message = __( '⚠️ L\'agenda Google partagé a été déconnecté (accès révoqué ou expiré côté Google). Reconnectez-le dans MP Agenda → Commerciaux.', 'mp-agenda' );
+		} else {
+			$name    = $technician['name'] ?? ( '#' . $technician['id'] );
+			$subject = __( '[MP Agenda] Un commercial a été déconnecté de Google Agenda', 'mp-agenda' );
+			$message = sprintf(
+				/* translators: %s: nom du commercial */
+				__( '⚠️ Le commercial %s a été déconnecté de Google Agenda. Reconnectez-le dans MP Agenda → Commerciaux.', 'mp-agenda' ),
+				$name
+			);
+		}
 
 		wp_mail( $admin_email, $subject, $message );
 
-		$this->log( sprintf( 'disconnect_and_alert tech_id=%d : tokens vidés, email d\'alerte envoyé à %s.', $technician['id'], $admin_email ) );
+		$this->log( sprintf( 'disconnect_and_alert (mode=%s) : tokens vidés, email d\'alerte envoyé à %s.', $mode, $admin_email ) );
 	}
 
 	/**
-	 * Vérifie quotidiennement le token de chaque technicien connecté à Google
-	 * Agenda (renouvellement si besoin), pour détecter proactivement une
-	 * déconnexion plutôt que d'attendre le prochain RDV/synchro. L'alerte admin
-	 * en cas de token définitivement irrécupérable est déjà envoyée par
-	 * ensure_valid_token()/disconnect_and_alert() — inutile de la dupliquer ici.
+	 * Vérifie quotidiennement le(s) token(s) Google en cours d'usage
+	 * (renouvellement si besoin), pour détecter proactivement une déconnexion
+	 * plutôt que d'attendre le prochain RDV/synchro :
+	 * - mode 'individual' : chaque technicien connecté individuellement.
+	 * - mode 'shared' : une seule vérification de l'agenda partagé.
+	 * L'alerte admin en cas de token définitivement irrécupérable est déjà
+	 * envoyée par ensure_valid_token()/disconnect_and_alert() — inutile de la
+	 * dupliquer ici.
 	 *
 	 * Appelée par le cron quotidien mp_agenda_google_token_check_cron
 	 * (voir MP_Agenda_Activator::schedule_cron() / MP_Agenda_Deactivator).
@@ -346,6 +525,24 @@ class MP_Agenda_Google_Sync {
 	 */
 	public function check_all_tokens() {
 		$technicians = MP_Agenda_DB::get_technicians( true );
+
+		if ( empty( $technicians ) ) {
+			return;
+		}
+
+		if ( 'shared' === $this->get_sync_mode() ) {
+			if ( ! $this->has_google_connected( $technicians[0] ) ) {
+				return;
+			}
+
+			$this->log( 'check_all_tokens : vérification de l\'agenda Google partagé.' );
+			$access_token = $this->ensure_valid_token( $technicians[0] );
+
+			if ( ! $access_token ) {
+				$this->log( 'check_all_tokens : agenda Google partagé irrécupérable pour l\'instant.' );
+			}
+			return;
+		}
 
 		foreach ( $technicians as $technician ) {
 			if ( empty( $technician['google_refresh_token'] ) ) {
@@ -375,7 +572,15 @@ class MP_Agenda_Google_Sync {
 	public function push_appointment( $appointment ) {
 		$technician = MP_Agenda_DB::get_technician( $appointment['technician_id'] );
 
-		if ( ! $technician || empty( $technician['google_refresh_token'] ) ) {
+		if ( ! $technician ) {
+			return;
+		}
+
+		// En mode 'shared', les identifiants viennent de l'agenda partagé (pas du
+		// technicien assigné au RDV) : le RDV est donc créé dans l'agenda partagé,
+		// pas dans un agenda individuel — voir get_credentials_for().
+		$credentials = $this->get_credentials_for( $technician );
+		if ( empty( $credentials['google_refresh_token'] ) ) {
 			return;
 		}
 
@@ -384,7 +589,7 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$calendar_id = $technician['google_calendar_id'] ?: 'primary';
+		$calendar_id = $credentials['google_calendar_id'] ?: 'primary';
 
 		$event = array(
 			'summary'     => sprintf( '%s — %s', $appointment['client_name'], $appointment['intervention_type'] ),
@@ -452,7 +657,12 @@ class MP_Agenda_Google_Sync {
 	public function delete_event( $appointment ) {
 		$technician = MP_Agenda_DB::get_technician( $appointment['technician_id'] );
 
-		if ( ! $technician || empty( $technician['google_refresh_token'] ) || empty( $appointment['google_event_id'] ) ) {
+		if ( ! $technician || empty( $appointment['google_event_id'] ) ) {
+			return;
+		}
+
+		$credentials = $this->get_credentials_for( $technician );
+		if ( empty( $credentials['google_refresh_token'] ) ) {
 			return;
 		}
 
@@ -461,7 +671,7 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$calendar_id = $technician['google_calendar_id'] ?: 'primary';
+		$calendar_id = $credentials['google_calendar_id'] ?: 'primary';
 
 		wp_remote_request(
 			self::API_BASE . "/calendars/{$calendar_id}/events/{$appointment['google_event_id']}",
@@ -497,26 +707,33 @@ class MP_Agenda_Google_Sync {
 	 * @return array Liste de périodes occupées : array( array( 'start' => 'Y-m-d H:i:s', 'end' => 'Y-m-d H:i:s' ), ... ).
 	 */
 	public function get_freebusy( $technician, $date ) {
-		$tech_id   = $technician['id'] ?? 0;
-		$cache_key = 'mp_agenda_freebusy_' . $tech_id . '_' . $date;
+		$mode    = $this->get_sync_mode();
+		$tech_id = $technician['id'] ?? 0;
+
+		// En mode partagé, tous les commerciaux consultent le MÊME calendrier
+		// Google : un cache par technicien serait à la fois redondant (un appel
+		// Google par commercial pour la même info) et potentiellement incohérent
+		// (chacun avec sa propre fenêtre de cache) — un seul cache partagé suffit.
+		$cache_key = 'shared' === $mode ? 'mp_agenda_freebusy_shared_' . $date : 'mp_agenda_freebusy_' . $tech_id . '_' . $date;
 
 		$cached = get_transient( $cache_key );
 		if ( false !== $cached ) {
-			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : réponse depuis le cache (transient).', $tech_id, $date ) );
+			$this->log( sprintf( 'get_freebusy tech_id=%d (mode=%s), date=%s : réponse depuis le cache (transient).', $tech_id, $mode, $date ) );
 			return $cached;
 		}
 
-		if ( empty( $technician['google_refresh_token'] ) ) {
+		$credentials = $this->get_credentials_for( $technician );
+		if ( empty( $credentials['google_refresh_token'] ) ) {
 			return array();
 		}
 
 		$access_token = $this->ensure_valid_token( $technician );
 		if ( ! $access_token ) {
-			$this->log( sprintf( 'get_freebusy tech_id=%d, date=%s : pas d\'access_token valide — fallback silencieux vers [].', $tech_id, $date ) );
+			$this->log( sprintf( 'get_freebusy tech_id=%d (mode=%s), date=%s : pas d\'access_token valide — fallback silencieux vers [].', $tech_id, $mode, $date ) );
 			return array();
 		}
 
-		$calendar_id = $technician['google_calendar_id'] ?: 'primary';
+		$calendar_id = $credentials['google_calendar_id'] ?: 'primary';
 
 		try {
 			$time_min_dt = new DateTime( $date . ' 00:00:00', wp_timezone() );
@@ -631,6 +848,11 @@ class MP_Agenda_Google_Sync {
 	 * @return void
 	 */
 	public function sync_all( $full_sync = false ) {
+		if ( 'shared' === $this->get_sync_mode() ) {
+			$this->sync_shared_calendar( $full_sync );
+			return;
+		}
+
 		$technicians = MP_Agenda_DB::get_technicians( true );
 
 		foreach ( $technicians as $technician ) {
@@ -642,7 +864,46 @@ class MP_Agenda_Google_Sync {
 	}
 
 	/**
-	 * Synchronise le calendrier Google d'un technicien vers les tables locales.
+	 * Synchronise l'agenda Google partagé (mode 'shared') : UNE SEULE requête
+	 * events.list avec les identifiants globaux, au lieu d'une synchro par
+	 * commercial. Les événements Google non reconnus sont créés comme
+	 * blocked_slots rattachés au premier commercial actif — la table
+	 * blocked_slots impose un technician_id (colonne NOT NULL), il n'est donc
+	 * pas possible de créer un créneau bloqué "sans commercial" sans modifier
+	 * le schéma de la table.
+	 *
+	 * @param bool $full_sync Voir sync_technician().
+	 * @return void
+	 */
+	private function sync_shared_calendar( $full_sync = false ) {
+		$technicians = MP_Agenda_DB::get_technicians( true );
+
+		if ( empty( $technicians ) ) {
+			$this->log( 'sync_shared_calendar : aucun commercial actif — synchro annulée (blocked_slots nécessite un technician_id).' );
+			return;
+		}
+
+		if ( ! $this->has_google_connected( $technicians[0] ) ) {
+			$this->log( 'sync_shared_calendar : agenda Google partagé non connecté — synchro annulée.' );
+			return;
+		}
+
+		$this->log( sprintf(
+			'sync_shared_calendar : synchro de l\'agenda partagé, créneaux bloqués rattachés au premier commercial actif (tech_id=%d, %s).',
+			$technicians[0]['id'],
+			$technicians[0]['name'] ?? '?'
+		) );
+
+		// sync_technician() lit déjà les identifiants via get_credentials_for() :
+		// en mode partagé, tous les technicians partagent le même appel Google —
+		// seul le premier commercial actif sert de rattachement pour les
+		// blocked_slots créés et pour le curseur de synchro (option_key ci-dessous).
+		$this->sync_technician( $technicians[0], $full_sync );
+	}
+
+	/**
+	 * Synchronise le calendrier Google (individuel du technicien, ou partagé
+	 * selon le mode configuré — voir get_credentials_for()) vers les tables locales.
 	 *
 	 * @param array $technician Données du technicien.
 	 * @param bool  $full_sync  Si true (synchro manuelle "🔄 Synchroniser Google"),
@@ -657,11 +918,15 @@ class MP_Agenda_Google_Sync {
 	 * @return void
 	 */
 	private function sync_technician( $technician, $full_sync = false ) {
+		$mode        = $this->get_sync_mode();
+		$credentials = $this->get_credentials_for( $technician );
+
 		$this->log( sprintf(
-			'sync_technician START for tech_id=%d, name=%s, calendar_id=%s, full_sync=%s',
+			'sync_technician START for tech_id=%d, name=%s, mode=%s, calendar_id=%s, full_sync=%s',
 			$technician['id'],
 			$technician['name'] ?? '?',
-			$technician['google_calendar_id'] ?: '(vide, repli sur "primary")',
+			$mode,
+			$credentials['google_calendar_id'] ?: '(vide, repli sur "primary")',
 			$full_sync ? 'true' : 'false'
 		) );
 
@@ -671,9 +936,12 @@ class MP_Agenda_Google_Sync {
 			return;
 		}
 
-		$calendar_id = $technician['google_calendar_id'] ?: 'primary';
-		$option_key  = 'mp_agenda_google_last_sync_' . $technician['id'];
-		$now         = gmdate( 'Y-m-d\TH:i:s\Z' );
+		$calendar_id = $credentials['google_calendar_id'] ?: 'primary';
+		// En mode partagé, le curseur de dernière synchro est global (un seul
+		// calendrier pour tout le monde) plutôt que rattaché au technicien qui a
+		// servi de point d'entrée, qui peut changer d'une synchro à l'autre.
+		$option_key = 'shared' === $mode ? 'mp_agenda_google_last_sync_shared' : 'mp_agenda_google_last_sync_' . $technician['id'];
+		$now        = gmdate( 'Y-m-d\TH:i:s\Z' );
 
 		if ( $full_sync ) {
 			// Synchro manuelle : on ignore délibérément tout état de synchro
