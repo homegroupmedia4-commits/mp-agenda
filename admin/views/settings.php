@@ -266,6 +266,14 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 			<div class="mp-agenda-field">
 				<label for="sms_sender"><?php esc_html_e( 'Nom de l\'expéditeur (11 caractères max)', 'mp-agenda' ); ?></label>
 				<input type="text" id="sms_sender" name="sms_sender" maxlength="11" value="<?php echo esc_attr( $mp_sms['sender'] ); ?>" />
+				<p class="description">
+					<?php esc_html_e( 'Laissez vide pour utiliser automatiquement le premier expéditeur validé sur votre compte OVH.', 'mp-agenda' ); ?>
+				</p>
+				<p class="description" style="margin-top:6px;">
+					<?php esc_html_e( 'Expéditeurs disponibles OVH :', 'mp-agenda' ); ?>
+					<span id="mp-agenda-sms-senders"><?php esc_html_e( 'Chargement…', 'mp-agenda' ); ?></span>
+					<button type="button" class="button button-small" id="mp-agenda-sms-senders-refresh"><?php esc_html_e( 'Rafraîchir', 'mp-agenda' ); ?></button>
+				</p>
 			</div>
 
 			<div class="mp-agenda-field">
@@ -326,23 +334,54 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 
 		<script>
 			document.addEventListener( 'DOMContentLoaded', function () {
-				var el = document.getElementById( 'mp-agenda-sms-credits' );
-				if ( ! el || typeof window.mpAgendaAdmin === 'undefined' ) {
+				if ( typeof window.mpAgendaAdmin === 'undefined' ) {
 					return;
 				}
-				var body = new FormData();
-				body.append( 'action', 'mp_agenda_sms_credits' );
-				body.append( 'nonce', window.mpAgendaAdmin.nonce );
-				fetch( window.mpAgendaAdmin.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body } )
-					.then( function ( r ) { return r.json(); } )
-					.then( function ( json ) {
-						if ( json && json.success && json.data && typeof json.data.credits !== 'undefined' ) {
-							el.textContent = json.data.credits;
-						} else {
-							el.textContent = ( json && json.data && json.data.message ) ? json.data.message : '—';
-						}
-					} )
-					.catch( function () { el.textContent = '—'; } );
+
+				function mpAgendaSmsFetch( action ) {
+					var body = new FormData();
+					body.append( 'action', action );
+					body.append( 'nonce', window.mpAgendaAdmin.nonce );
+					return fetch( window.mpAgendaAdmin.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body } )
+						.then( function ( r ) { return r.json(); } );
+				}
+
+				var creditsEl = document.getElementById( 'mp-agenda-sms-credits' );
+				if ( creditsEl ) {
+					mpAgendaSmsFetch( 'mp_agenda_sms_credits' )
+						.then( function ( json ) {
+							if ( json && json.success && json.data && typeof json.data.credits !== 'undefined' ) {
+								creditsEl.textContent = json.data.credits;
+							} else {
+								creditsEl.textContent = ( json && json.data && json.data.message ) ? json.data.message : '—';
+							}
+						} )
+						.catch( function () { creditsEl.textContent = '—'; } );
+				}
+
+				var sendersEl = document.getElementById( 'mp-agenda-sms-senders' );
+				var sendersBtn = document.getElementById( 'mp-agenda-sms-senders-refresh' );
+				function loadSenders() {
+					if ( ! sendersEl ) {
+						return;
+					}
+					sendersEl.textContent = '<?php echo esc_js( __( 'Chargement…', 'mp-agenda' ) ); ?>';
+					mpAgendaSmsFetch( 'mp_agenda_sms_senders' )
+						.then( function ( json ) {
+							if ( json && json.success && json.data && Array.isArray( json.data.senders ) ) {
+								sendersEl.textContent = json.data.senders.length
+									? json.data.senders.join( ', ' )
+									: '<?php echo esc_js( __( 'aucun expéditeur déclaré sur le compte OVH', 'mp-agenda' ) ); ?>';
+							} else {
+								sendersEl.textContent = ( json && json.data && json.data.message ) ? json.data.message : '—';
+							}
+						} )
+						.catch( function () { sendersEl.textContent = '—'; } );
+				}
+				if ( sendersBtn ) {
+					sendersBtn.addEventListener( 'click', loadSenders );
+				}
+				loadSenders();
 			} );
 		</script>
 

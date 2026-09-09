@@ -223,12 +223,32 @@ class MP_Agenda_SMS {
 
 		$sender = isset( $s['sender'] ) ? trim( (string) $s['sender'] ) : '';
 
+		// OVH exige toujours un expéditeur valide. Si aucun n'est configuré, on
+		// récupère la liste des expéditeurs déclarés sur le compte et on prend le
+		// premier disponible.
+		if ( '' === $sender ) {
+			$available = $this->get_available_senders();
+
+			if ( is_array( $available ) && ! empty( $available ) ) {
+				$sender = (string) $available[0];
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( '[MP Agenda SMS] Aucun expéditeur configuré — 1er expéditeur OVH disponible utilisé : ' . $sender );
+			} elseif ( is_array( $available ) ) {
+				// Liste vide confirmée : inutile d'appeler OVH, l'envoi serait refusé.
+				$this->last_error = __( 'Aucun expéditeur SMS n\'est déclaré sur le compte OVH. Ajoutez et faites valider un expéditeur dans l\'espace OVH (SMS → Expéditeurs), puis renseignez son nom dans les réglages.', 'mp-agenda' );
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( '[MP Agenda SMS] Envoi ignoré — ' . $this->last_error );
+				return false;
+			}
+			// $available === null : impossible de vérifier (réseau/clés) — on tente quand même.
+		}
+
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		error_log( sprintf(
 			'[MP Agenda SMS] Tentative d\'envoi vers %s (service=%s, sender=%s).',
 			$to,
 			$s['service_name'],
-			'' !== $sender ? $sender : '(par défaut OVH)'
+			'' !== $sender ? $sender : '(aucun)'
 		) );
 
 		$url = self::API_BASE . '/sms/' . rawurlencode( $s['service_name'] ) . '/jobs';
@@ -368,6 +388,84 @@ class MP_Agenda_SMS {
 		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		return ( is_array( $decoded ) && isset( $decoded['creditsLeft'] ) ) ? (float) $decoded['creditsLeft'] : null;
+	}
+
+	/**
+	 * Récupère la liste des expéditeurs (senders) déclarés / validés pour le
+	 * service OVH SMS configuré.
+	 *
+	 * GET /sms/{serviceName}/senders — signé comme les autres appels.
+	 *
+	 * Résultat mis en cache 15 minutes (transient) pour ne pas interroger OVH à
+	 * chaque SMS lors d'un lot de rappels ; $force = true ignore le cache
+	 * (utilisé par le bouton « Rafraîchir » de la page Réglages).
+	 *
+	 * @param bool $force Forcer un appel API en ignorant le cache.
+	 * @return string[]|null Liste des noms d'expéditeurs, ou null si l'appel a échoué
+	 *                       (réseau, clés, HTTP ≠ 200). Un tableau vide signifie
+	 *                       "aucun expéditeur déclaré".
+	 */
+	public function get_available_senders( $force = false ) {
+		$s = self::get_settings();
+
+		if ( empty( $s['service_name'] ) || empty( $s['app_key'] ) || empty( $s['app_secret'] ) || empty( $s['consumer_key'] ) ) {
+			return null;
+		}
+
+		$cache_key = 'mp_agenda_sms_senders_' . md5( $s['service_name'] . '|' . $s['app_key'] );
+
+		if ( ! $force ) {
+			$cached = get_transient( $cache_key );
+			if ( is_array( $cached ) ) {
+				return $cached;
+			}
+		}
+
+		$url       = self::API_BASE . '/sms/' . rawurlencode( $s['service_name'] ) . '/senders';
+		$timestamp = $this->get_ovh_time();
+		$signature = $this->sign( $s['app_secret'], $s['consumer_key'], 'GET', $url, '', $timestamp );
+
+		$response = wp_remote_get(
+			$url,
+			array(
+				'timeout' => 15,
+				'headers' => array(
+					'X-Ovh-Application' => $s['app_key'],
+					'X-Ovh-Timestamp'  => (string) $timestamp,
+					'X-Ovh-Consumer'   => $s['consumer_key'],
+					'X-Ovh-Signature'  => $signature,
+				),
+			)
+		);
+
+		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[MP Agenda SMS] get_available_senders : réponse OVH invalide.' );
+			return null;
+		}
+
+		$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+
+		if ( ! is_array( $decoded ) ) {
+			return null;
+		}
+
+		// OVH renvoie une liste de chaînes (["MP RENOV", "36180"]) ; on tolère aussi
+		// une liste d'objets { "sender": "..." } au cas où l'API évoluerait.
+		$senders = array();
+		foreach ( $decoded as $item ) {
+			if ( is_string( $item ) && '' !== trim( $item ) ) {
+				$senders[] = trim( $item );
+			} elseif ( is_array( $item ) && ! empty( $item['sender'] ) ) {
+				$senders[] = (string) $item['sender'];
+			}
+		}
+
+		$senders = array_values( array_unique( $senders ) );
+
+		set_transient( $cache_key, $senders, 15 * MINUTE_IN_SECONDS );
+
+		return $senders;
 	}
 
 	/* ---------------------------------------------------------------------

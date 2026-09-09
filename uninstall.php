@@ -85,6 +85,14 @@ $wpdb->query(
 	)
 );
 
+// Supprime les caches de la liste des expéditeurs SMS OVH (transients).
+$wpdb->query(
+	$wpdb->prepare(
+		"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s",
+		'%' . $wpdb->esc_like( 'mp_agenda_sms_senders_' ) . '%'
+	)
+);
+
 // Nettoie les tâches cron planifiées.
 wp_clear_scheduled_hook( 'mp_agenda_google_sync_cron' );
 wp_clear_scheduled_hook( 'mp_agenda_google_token_check_cron' );

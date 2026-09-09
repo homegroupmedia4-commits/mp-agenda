@@ -39,6 +39,7 @@ class MP_Agenda_Admin {
 		add_action( 'admin_post_mp_agenda_save_sms_settings', array( $this, 'handle_save_sms_settings' ) );
 		add_action( 'admin_post_mp_agenda_send_test_sms', array( $this, 'handle_send_test_sms' ) );
 		add_action( 'wp_ajax_mp_agenda_sms_credits', array( $this, 'handle_sms_credits_ajax' ) );
+		add_action( 'wp_ajax_mp_agenda_sms_senders', array( $this, 'handle_sms_senders_ajax' ) );
 	}
 
 	/**
@@ -606,6 +607,28 @@ class MP_Agenda_Admin {
 		}
 
 		wp_send_json_success( array( 'credits' => $credits ) );
+	}
+
+	/**
+	 * Endpoint AJAX (admin) : retourne la liste des expéditeurs SMS déclarés sur OVH.
+	 *
+	 * @return void
+	 */
+	public function handle_sms_senders_ajax() {
+		check_ajax_referer( 'mp_agenda_ajax', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Action non autorisée.', 'mp-agenda' ) ), 403 );
+		}
+
+		$sms     = new MP_Agenda_SMS();
+		$senders = $sms->get_available_senders( true );
+
+		if ( null === $senders ) {
+			wp_send_json_error( array( 'message' => __( 'Liste indisponible (clés API manquantes ou API OVH injoignable).', 'mp-agenda' ) ) );
+		}
+
+		wp_send_json_success( array( 'senders' => array_values( $senders ) ) );
 	}
 
 	/**
