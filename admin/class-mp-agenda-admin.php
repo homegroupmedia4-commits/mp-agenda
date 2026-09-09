@@ -543,8 +543,35 @@ class MP_Agenda_Admin {
 
 		$phone = isset( $_POST['sms_test_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_test_phone'] ) ) : '';
 
-		$sms  = new MP_Agenda_SMS();
-		$sent = ( '' !== $phone ) ? $sms->send_test_sms( $phone ) : false;
+		$sms          = new MP_Agenda_SMS();
+		$option_saved = ( false !== get_option( 'mp_agenda_sms_settings', false ) );
+		$issues       = $sms->get_config_issues();
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf(
+			'[MP Agenda SMS] Test demandé — numéro fourni : %s ; option mp_agenda_sms_settings : %s ; problèmes de configuration : %s',
+			'' === $phone ? '(vide)' : $phone,
+			$option_saved ? 'enregistrée' : 'ABSENTE (jamais enregistrée)',
+			empty( $issues ) ? 'aucun' : implode( ' | ', $issues )
+		) );
+
+		if ( '' === $phone ) {
+			$message = __( 'Aucun numéro de test n\'a été saisi.', 'mp-agenda' );
+			$sent    = false;
+		} elseif ( ! empty( $issues ) ) {
+			$message = __( 'Configuration SMS incomplète : ', 'mp-agenda' ) . implode( ' ; ', $issues ) . '.';
+			$sent    = false;
+		} else {
+			$sent    = $sms->send_test_sms( $phone );
+			$message = $sent
+				? __( 'SMS de test transmis à OVH.', 'mp-agenda' )
+				: $sms->get_last_error();
+		}
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[MP Agenda SMS] Résultat du test : ' . ( $sent ? 'OK' : 'ÉCHEC — ' . $message ) );
+
+		set_transient( 'mp_agenda_sms_test_result_' . get_current_user_id(), $message, MINUTE_IN_SECONDS );
 
 		wp_safe_redirect(
 			add_query_arg(

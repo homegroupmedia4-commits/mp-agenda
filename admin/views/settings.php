@@ -23,7 +23,12 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 	<h1 class="mp-agenda-title"><?php esc_html_e( 'Réglages MP Agenda', 'mp-agenda' ); ?></h1>
 
 	<?php
-	$mp_notice = isset( $_GET['mp_agenda_notice'] ) ? sanitize_key( wp_unslash( $_GET['mp_agenda_notice'] ) ) : '';
+	$mp_notice      = isset( $_GET['mp_agenda_notice'] ) ? sanitize_key( wp_unslash( $_GET['mp_agenda_notice'] ) ) : '';
+	$mp_sms_result  = '';
+	if ( in_array( $mp_notice, array( 'test_sms_sent', 'test_sms_failed' ), true ) ) {
+		$mp_sms_result = (string) get_transient( 'mp_agenda_sms_test_result_' . get_current_user_id() );
+		delete_transient( 'mp_agenda_sms_test_result_' . get_current_user_id() );
+	}
 	if ( 'test_reminder_sent' === $mp_notice ) :
 		?>
 		<div class="notice notice-success is-dismissible mp-agenda-notice">
@@ -35,11 +40,14 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 		</div>
 	<?php elseif ( 'test_sms_sent' === $mp_notice ) : ?>
 		<div class="notice notice-success is-dismissible mp-agenda-notice">
-			<p><?php esc_html_e( 'SMS de test transmis à OVH. Vérifiez la réception et les logs si besoin.', 'mp-agenda' ); ?></p>
+			<p><?php echo esc_html( '' !== $mp_sms_result ? $mp_sms_result : __( 'SMS de test transmis à OVH.', 'mp-agenda' ) ); ?> <?php esc_html_e( 'Vérifiez la réception et les logs si besoin.', 'mp-agenda' ); ?></p>
 		</div>
 	<?php elseif ( 'test_sms_failed' === $mp_notice ) : ?>
 		<div class="notice notice-error is-dismissible mp-agenda-notice">
-			<p><?php esc_html_e( 'Échec de l\'envoi du SMS de test (numéro manquant, rappels SMS désactivés ou clés API OVH incomplètes). Voir error_log.', 'mp-agenda' ); ?></p>
+			<p>
+				<strong><?php esc_html_e( 'Échec de l\'envoi du SMS de test.', 'mp-agenda' ); ?></strong><br />
+				<?php echo esc_html( '' !== $mp_sms_result ? $mp_sms_result : __( 'Cause inconnue — voir error_log.', 'mp-agenda' ) ); ?>
+			</p>
 		</div>
 	<?php elseif ( '' !== $mp_notice ) : ?>
 		<div class="notice notice-success is-dismissible mp-agenda-notice">
@@ -199,6 +207,28 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 		</form>
 
 	<?php elseif ( 'sms' === $mp_active_tab ) : ?>
+		<?php
+		$mp_sms_obj    = new MP_Agenda_SMS();
+		$mp_sms_issues = $mp_sms_obj->get_config_issues();
+		?>
+		<?php if ( empty( $mp_sms_issues ) ) : ?>
+			<div class="notice notice-success inline" style="margin:0 0 16px;">
+				<p><?php esc_html_e( 'Configuration SMS complète : les rappels et le SMS de test peuvent être envoyés.', 'mp-agenda' ); ?></p>
+			</div>
+		<?php else : ?>
+			<div class="notice notice-warning inline" style="margin:0 0 16px;">
+				<p>
+					<strong><?php esc_html_e( 'Les SMS ne partiront pas tant que :', 'mp-agenda' ); ?></strong>
+				</p>
+				<ul style="list-style:disc;margin-left:20px;">
+					<?php foreach ( $mp_sms_issues as $mp_issue ) : ?>
+						<li><?php echo esc_html( $mp_issue ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+				<p><?php esc_html_e( 'Renseignez les champs ci-dessous puis cliquez sur « Enregistrer » avant de tester.', 'mp-agenda' ); ?></p>
+			</div>
+		<?php endif; ?>
+
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
 			<?php wp_nonce_field( 'mp_agenda_save_sms_settings' ); ?>
 			<input type="hidden" name="action" value="mp_agenda_save_sms_settings" />

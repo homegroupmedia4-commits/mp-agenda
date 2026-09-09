@@ -46,6 +46,13 @@ class MP_Agenda_SMS {
 	}
 
 	/**
+	 * Dernière erreur rencontrée (message lisible), pour l'affichage côté admin.
+	 *
+	 * @var string
+	 */
+	private $last_error = '';
+
+	/**
 	 * Retourne les réglages SMS fusionnés avec les valeurs par défaut.
 	 *
 	 * @return array
@@ -55,18 +62,59 @@ class MP_Agenda_SMS {
 	}
 
 	/**
+	 * Message décrivant la dernière erreur (chaîne vide si aucune).
+	 *
+	 * @return string
+	 */
+	public function get_last_error() {
+		return $this->last_error;
+	}
+
+	/**
+	 * Liste, en clair, des réglages SMS manquants (tableau vide = configuration complète).
+	 *
+	 * Distingue explicitement "option jamais enregistrée" du cas "option enregistrée
+	 * mais champ vide", pour lever l'ambiguïté la plus fréquente : réglages saisis
+	 * dans le formulaire mais bouton « Enregistrer » jamais cliqué.
+	 *
+	 * @return string[]
+	 */
+	public function get_config_issues() {
+		$issues = array();
+
+		if ( false === get_option( 'mp_agenda_sms_settings', false ) ) {
+			$issues[] = __( 'les réglages SMS n\'ont jamais été enregistrés (cliquez sur « Enregistrer » dans l\'onglet SMS)', 'mp-agenda' );
+			return $issues;
+		}
+
+		$s = self::get_settings();
+
+		if ( empty( $s['enabled'] ) ) {
+			$issues[] = __( 'la case « Activer les rappels SMS » est décochée', 'mp-agenda' );
+		}
+		if ( empty( $s['service_name'] ) ) {
+			$issues[] = __( 'le service OVH SMS est vide', 'mp-agenda' );
+		}
+		if ( empty( $s['app_key'] ) ) {
+			$issues[] = __( 'l\'Application Key est vide', 'mp-agenda' );
+		}
+		if ( empty( $s['app_secret'] ) ) {
+			$issues[] = __( 'l\'Application Secret est vide', 'mp-agenda' );
+		}
+		if ( empty( $s['consumer_key'] ) ) {
+			$issues[] = __( 'la Consumer Key est vide', 'mp-agenda' );
+		}
+
+		return $issues;
+	}
+
+	/**
 	 * Les SMS sont-ils utilisables ? (case activée ET service + 3 clés API renseignés)
 	 *
 	 * @return bool
 	 */
 	public function is_configured() {
-		$s = self::get_settings();
-
-		return ! empty( $s['enabled'] )
-			&& ! empty( $s['service_name'] )
-			&& ! empty( $s['app_key'] )
-			&& ! empty( $s['app_secret'] )
-			&& ! empty( $s['consumer_key'] );
+		return array() === $this->get_config_issues();
 	}
 
 	/* ---------------------------------------------------------------------
@@ -151,18 +199,30 @@ class MP_Agenda_SMS {
 	public function send_sms( $phone_number, $message ) {
 		$s = self::get_settings();
 
-		if ( ! $this->is_configured() ) {
+		$this->last_error = '';
+
+		$issues = $this->get_config_issues();
+		if ( ! empty( $issues ) ) {
+			$this->last_error = __( 'Configuration SMS incomplète : ', 'mp-agenda' ) . implode( ' ; ', $issues ) . '.';
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( '[MP Agenda SMS] Envoi ignoré : rappels SMS désactivés ou clés API OVH incomplètes.' );
+			error_log( '[MP Agenda SMS] Envoi ignoré — ' . $this->last_error );
 			return false;
 		}
 
 		$to = self::format_phone( $phone_number );
 		if ( '' === $to ) {
+			$this->last_error = sprintf(
+				/* translators: %s: numéro fourni */
+				__( 'Numéro de téléphone vide ou invalide (« %s »).', 'mp-agenda' ),
+				$phone_number
+			);
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( '[MP Agenda SMS] Envoi ignoré : numéro de téléphone vide ou invalide (' . $phone_number . ').' );
+			error_log( '[MP Agenda SMS] Envoi ignoré — ' . $this->last_error );
 			return false;
 		}
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( sprintf( '[MP Agenda SMS] Tentative d\'envoi vers %s (service=%s, sender=%s).', $to, $s['service_name'], $s['sender'] ) );
 
 		$url = self::API_BASE . '/sms/' . rawurlencode( $s['service_name'] ) . '/jobs';
 
@@ -196,6 +256,11 @@ class MP_Agenda_SMS {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			$this->last_error = sprintf(
+				/* translators: %s: message d'erreur réseau */
+				__( 'Impossible de joindre l\'API OVH : %s', 'mp-agenda' ),
+				$response->get_error_message()
+			);
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log( '[MP Agenda SMS] Échec réseau vers OVH : ' . $response->get_error_message() );
 			return false;
@@ -205,6 +270,12 @@ class MP_Agenda_SMS {
 		$rawbody = wp_remote_retrieve_body( $response );
 
 		if ( $code < 200 || $code >= 300 ) {
+			$this->last_error = sprintf(
+				/* translators: 1: code HTTP, 2: corps de la réponse OVH */
+				__( 'OVH a répondu HTTP %1$d : %2$s', 'mp-agenda' ),
+				$code,
+				$rawbody
+			);
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log( sprintf( '[MP Agenda SMS] OVH a répondu HTTP %d : %s', $code, $rawbody ) );
 			return false;
@@ -214,8 +285,25 @@ class MP_Agenda_SMS {
 		$invalid = ( is_array( $decoded ) && ! empty( $decoded['invalidReceivers'] ) ) ? (array) $decoded['invalidReceivers'] : array();
 
 		if ( ! empty( $invalid ) ) {
+			$this->last_error = sprintf(
+				/* translators: %s: numéro refusé */
+				__( 'OVH a refusé le numéro %s (destinataire invalide).', 'mp-agenda' ),
+				$to
+			);
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log( sprintf( '[MP Agenda SMS] Destinataire refusé par OVH (%s) : %s', $to, $rawbody ) );
+			return false;
+		}
+
+		// Un job accepté doit contenir au moins un id ; sinon OVH a "accepté" sans rien envoyer.
+		if ( ! is_array( $decoded ) || empty( $decoded['ids'] ) ) {
+			$this->last_error = sprintf(
+				/* translators: %s: corps de la réponse OVH */
+				__( 'Réponse OVH inattendue (aucun identifiant de job) : %s', 'mp-agenda' ),
+				$rawbody
+			);
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[MP Agenda SMS] Réponse OVH sans id de job : ' . $rawbody );
 			return false;
 		}
 
