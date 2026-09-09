@@ -53,6 +53,13 @@ class MP_Agenda_SMS {
 	private $last_error = '';
 
 	/**
+	 * Code HTTP de la dernière réponse OVH (0 = erreur réseau / pas d'appel).
+	 *
+	 * @var int
+	 */
+	private $last_http_code = 0;
+
+	/**
 	 * Retourne les réglages SMS fusionnés avec les valeurs par défaut.
 	 *
 	 * @return array
@@ -199,7 +206,8 @@ class MP_Agenda_SMS {
 	public function send_sms( $phone_number, $message ) {
 		$s = self::get_settings();
 
-		$this->last_error = '';
+		$this->last_error     = '';
+		$this->last_http_code = 0;
 
 		$issues = $this->get_config_issues();
 		if ( ! empty( $issues ) ) {
@@ -252,6 +260,55 @@ class MP_Agenda_SMS {
 			'' !== $sender ? $sender : 'senderForResponse'
 		) );
 
+		$ok = $this->post_job( $s, $to, $message, $sender, $use_sender_for_response );
+
+		// Retry : si OVH refuse l'expéditeur (HTTP 403 « pending validation » /
+		// « does not exist » / …), on retente immédiatement avec un numéro court
+		// virtuel (senderForResponse) au lieu de l'expéditeur nommé.
+		if ( ! $ok && '' !== $sender && 403 === $this->last_http_code && $this->looks_like_sender_error( $this->last_error ) ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( sprintf( '[MP Agenda SMS] Expéditeur « %s » refusé par OVH (HTTP 403) — nouvelle tentative via senderForResponse.', $sender ) );
+			$ok = $this->post_job( $s, $to, $message, '', true );
+		}
+
+		return $ok;
+	}
+
+	/**
+	 * L'erreur OVH concerne-t-elle l'expéditeur (nom refusé / en attente de validation) ?
+	 *
+	 * @param string $error Message d'erreur.
+	 * @return bool
+	 */
+	private function looks_like_sender_error( $error ) {
+		$error = strtolower( (string) $error );
+
+		if ( false === strpos( $error, 'sender' ) ) {
+			return false;
+		}
+
+		return (
+			false !== strpos( $error, 'pending' )
+			|| false !== strpos( $error, 'does not exist' )
+			|| false !== strpos( $error, 'not valid' )
+			|| false !== strpos( $error, 'invalid' )
+			|| false !== strpos( $error, 'unknown' )
+			|| false !== strpos( $error, 'disable' )
+		);
+	}
+
+	/**
+	 * Envoie effectivement un job SMS à OVH (POST /sms/{service}/jobs) et analyse
+	 * la réponse. Renseigne $this->last_error et $this->last_http_code.
+	 *
+	 * @param array  $s                   Réglages SMS.
+	 * @param string $to                  Numéro destinataire normalisé.
+	 * @param string $message             Contenu du SMS.
+	 * @param string $sender              Nom d'expéditeur ('' = aucun).
+	 * @param bool   $sender_for_response Utiliser un numéro court virtuel OVH (senderForResponse).
+	 * @return bool True si OVH a accepté le job.
+	 */
+	private function post_job( $s, $to, $message, $sender, $sender_for_response ) {
 		$url = self::API_BASE . '/sms/' . rawurlencode( $s['service_name'] ) . '/jobs';
 
 		$payload = array(
@@ -265,7 +322,7 @@ class MP_Agenda_SMS {
 		if ( '' !== $sender ) {
 			// Expéditeur (configuré ou 1er expéditeur validé du compte).
 			$payload['sender'] = $sender;
-		} elseif ( $use_sender_for_response ) {
+		} elseif ( $sender_for_response ) {
 			// Aucun expéditeur validé : numéro court virtuel OVH.
 			$payload['senderForResponse'] = true;
 		}
@@ -291,7 +348,8 @@ class MP_Agenda_SMS {
 		);
 
 		if ( is_wp_error( $response ) ) {
-			$this->last_error = sprintf(
+			$this->last_http_code = 0;
+			$this->last_error     = sprintf(
 				/* translators: %s: message d'erreur réseau */
 				__( 'Impossible de joindre l\'API OVH : %s', 'mp-agenda' ),
 				$response->get_error_message()
@@ -303,6 +361,8 @@ class MP_Agenda_SMS {
 
 		$code    = (int) wp_remote_retrieve_response_code( $response );
 		$rawbody = wp_remote_retrieve_body( $response );
+
+		$this->last_http_code = $code;
 
 		if ( $code < 200 || $code >= 300 ) {
 			$this->last_error = sprintf(
@@ -342,12 +402,15 @@ class MP_Agenda_SMS {
 			return false;
 		}
 
+		$this->last_error = '';
+
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		error_log( sprintf(
-			'[MP Agenda SMS] SMS envoyé à %s (job OVH : %s, crédits consommés : %s)',
+			'[MP Agenda SMS] SMS envoyé à %s (job OVH : %s, crédits consommés : %s, expéditeur : %s)',
 			$to,
-			( is_array( $decoded ) && isset( $decoded['ids'][0] ) ) ? $decoded['ids'][0] : 'n/c',
-			( is_array( $decoded ) && isset( $decoded['totalCreditsRemoved'] ) ) ? $decoded['totalCreditsRemoved'] : 'n/c'
+			isset( $decoded['ids'][0] ) ? $decoded['ids'][0] : 'n/c',
+			isset( $decoded['totalCreditsRemoved'] ) ? $decoded['totalCreditsRemoved'] : 'n/c',
+			'' !== $sender ? $sender : 'senderForResponse'
 		) );
 
 		return true;
