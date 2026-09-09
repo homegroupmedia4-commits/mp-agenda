@@ -221,11 +221,11 @@ class MP_Agenda_SMS {
 			return false;
 		}
 
-		$sender = isset( $s['sender'] ) ? trim( (string) $s['sender'] ) : '';
+		$sender                  = isset( $s['sender'] ) ? trim( (string) $s['sender'] ) : '';
+		$use_sender_for_response = false;
 
-		// OVH exige toujours un expéditeur valide. Si aucun n'est configuré, on
-		// récupère la liste des expéditeurs déclarés sur le compte et on prend le
-		// premier disponible.
+		// OVH exige toujours un expéditeur. Si aucun n'est configuré, on récupère la
+		// liste des expéditeurs validés sur le compte et on prend le premier.
 		if ( '' === $sender ) {
 			$available = $this->get_available_senders();
 
@@ -233,14 +233,15 @@ class MP_Agenda_SMS {
 				$sender = (string) $available[0];
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 				error_log( '[MP Agenda SMS] Aucun expéditeur configuré — 1er expéditeur OVH disponible utilisé : ' . $sender );
-			} elseif ( is_array( $available ) ) {
-				// Liste vide confirmée : inutile d'appeler OVH, l'envoi serait refusé.
-				$this->last_error = __( 'Aucun expéditeur SMS n\'est déclaré sur le compte OVH. Ajoutez et faites valider un expéditeur dans l\'espace OVH (SMS → Expéditeurs), puis renseignez son nom dans les réglages.', 'mp-agenda' );
+			} else {
+				// Aucun expéditeur validé (liste vide) ou liste indisponible : plutôt
+				// que d'échouer, on demande à OVH un numéro court virtuel via
+				// "senderForResponse" (autorise aussi les réponses du client) et on
+				// n'envoie PAS de clé "sender".
+				$use_sender_for_response = true;
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				error_log( '[MP Agenda SMS] Envoi ignoré — ' . $this->last_error );
-				return false;
+				error_log( '[MP Agenda SMS] Aucun expéditeur validé disponible — envoi via senderForResponse (numéro court OVH).' );
 			}
-			// $available === null : impossible de vérifier (réseau/clés) — on tente quand même.
 		}
 
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
@@ -248,7 +249,7 @@ class MP_Agenda_SMS {
 			'[MP Agenda SMS] Tentative d\'envoi vers %s (service=%s, sender=%s).',
 			$to,
 			$s['service_name'],
-			'' !== $sender ? $sender : '(aucun)'
+			'' !== $sender ? $sender : 'senderForResponse'
 		) );
 
 		$url = self::API_BASE . '/sms/' . rawurlencode( $s['service_name'] ) . '/jobs';
@@ -261,10 +262,12 @@ class MP_Agenda_SMS {
 			'priority'     => 'high',
 		);
 
-		// Expéditeur personnalisé uniquement s'il est renseigné : sinon on n'envoie
-		// PAS la clé "sender" et OVH utilise son numéro court par défaut.
 		if ( '' !== $sender ) {
+			// Expéditeur (configuré ou 1er expéditeur validé du compte).
 			$payload['sender'] = $sender;
+		} elseif ( $use_sender_for_response ) {
+			// Aucun expéditeur validé : numéro court virtuel OVH.
+			$payload['senderForResponse'] = true;
 		}
 
 		$body = wp_json_encode( $payload );
