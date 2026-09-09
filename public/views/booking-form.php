@@ -186,6 +186,15 @@ $mp_default_technician = isset( $atts['default_technician'] ) ? absint( $atts['d
 					<div class="mp-agenda-success-icon">&#10003;</div>
 					<h3><?php esc_html_e( 'Votre rendez-vous est confirmé !', 'mp-agenda' ); ?></h3>
 					<p id="mp-agenda-success-message"></p>
+
+					<div class="mp-agenda-calendar-add" id="mp-agenda-calendar-add" hidden>
+						<p class="mp-agenda-calendar-add-title"><?php esc_html_e( 'Ajouter à mon calendrier', 'mp-agenda' ); ?></p>
+						<div class="mp-agenda-calendar-add-buttons">
+							<a href="#" target="_blank" rel="noopener" class="mp-agenda-calendar-btn" data-calendar="google"><?php esc_html_e( 'Google', 'mp-agenda' ); ?></a>
+							<a href="#" class="mp-agenda-calendar-btn" data-calendar="outlook"><?php esc_html_e( 'Outlook', 'mp-agenda' ); ?></a>
+							<a href="#" class="mp-agenda-calendar-btn" data-calendar="apple"><?php esc_html_e( 'Apple', 'mp-agenda' ); ?></a>
+						</div>
+					</div>
 				</section>
 
 			</form>

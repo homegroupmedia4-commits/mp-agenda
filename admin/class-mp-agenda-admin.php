@@ -35,6 +35,7 @@ class MP_Agenda_Admin {
 		add_action( 'admin_post_mp_agenda_google_disconnect', array( $this, 'handle_google_disconnect' ) );
 		add_action( 'admin_post_mp_agenda_google_disconnect_shared', array( $this, 'handle_google_disconnect_shared' ) );
 		add_action( 'admin_post_mp_agenda_export_csv', array( $this, 'handle_export_csv' ) );
+		add_action( 'admin_post_mp_agenda_send_test_reminder', array( $this, 'handle_send_test_reminder' ) );
 	}
 
 	/**
@@ -328,13 +329,24 @@ class MP_Agenda_Admin {
 	public function handle_save_settings() {
 		$this->verify_request( 'mp_agenda_save_settings' );
 
+		$existing = get_option( 'mp_agenda_settings', array() );
+
+		// Les cases à cocher "notifications" ne sont rendues QUE par l'onglet
+		// Notifications (marqueur mp_agenda_notifications_tab). Sur les autres onglets
+		// (Général, RGPD), on conserve les valeurs déjà enregistrées plutôt que de les
+		// remettre à 0 faute de champ soumis.
+		$is_notifications_tab = isset( $_POST['mp_agenda_notifications_tab'] );
+
+		$notify_reminder_default = array_key_exists( 'notify_reminder', $existing ) ? (int) ! empty( $existing['notify_reminder'] ) : 1;
+
 		$settings = array(
 			'company_name'               => isset( $_POST['company_name'] ) ? sanitize_text_field( wp_unslash( $_POST['company_name'] ) ) : '',
 			'notification_email'         => isset( $_POST['notification_email'] ) ? sanitize_email( wp_unslash( $_POST['notification_email'] ) ) : '',
 			'default_duration'           => isset( $_POST['default_duration'] ) ? absint( $_POST['default_duration'] ) : 60,
 			'timezone'                   => isset( $_POST['timezone'] ) ? sanitize_text_field( wp_unslash( $_POST['timezone'] ) ) : wp_timezone_string(),
-			'notify_client'              => isset( $_POST['notify_client'] ) ? 1 : 0,
-			'notify_technician'          => isset( $_POST['notify_technician'] ) ? 1 : 0,
+			'notify_client'              => $is_notifications_tab ? ( isset( $_POST['notify_client'] ) ? 1 : 0 ) : (int) ! empty( $existing['notify_client'] ),
+			'notify_technician'          => $is_notifications_tab ? ( isset( $_POST['notify_technician'] ) ? 1 : 0 ) : (int) ! empty( $existing['notify_technician'] ),
+			'notify_reminder'            => $is_notifications_tab ? ( isset( $_POST['notify_reminder'] ) ? 1 : 0 ) : $notify_reminder_default,
 			'require_technician_choice' => isset( $_POST['require_technician_choice'] ) ? 1 : 0,
 		);
 
@@ -456,6 +468,34 @@ class MP_Agenda_Admin {
 		delete_option( 'mp_agenda_google_last_sync_shared' );
 
 		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-technicians', 'mp_agenda_notice' => 'disconnected' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Envoie un email de rappel de test à l'adresse de l'administrateur, pour
+	 * vérifier le rendu du template reminder-client.php.
+	 *
+	 * @return void
+	 */
+	public function handle_send_test_reminder() {
+		$this->verify_request( 'mp_agenda_send_test_reminder' );
+
+		$settings = get_option( 'mp_agenda_settings', array() );
+		$to       = ! empty( $settings['notification_email'] ) ? $settings['notification_email'] : get_option( 'admin_email' );
+
+		$notifications = new MP_Agenda_Notifications();
+		$sent          = $notifications->send_test_reminder( $to );
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'             => 'mp-agenda-settings',
+					'tab'              => 'notifications',
+					'mp_agenda_notice' => $sent ? 'test_reminder_sent' : 'test_reminder_failed',
+				),
+				admin_url( 'admin.php' )
+			)
+		);
 		exit;
 	}
 

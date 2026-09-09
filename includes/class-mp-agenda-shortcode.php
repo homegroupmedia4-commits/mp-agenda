@@ -20,6 +20,7 @@ class MP_Agenda_Shortcode {
 	public function __construct() {
 		add_shortcode( 'mp_agenda_booking', array( $this, 'render' ) );
 		add_shortcode( 'mp_agenda_popup', array( $this, 'render_popup' ) );
+		add_shortcode( 'mp_agenda_manage', array( $this, 'render_manage' ) );
 	}
 
 	/**
@@ -39,6 +40,29 @@ class MP_Agenda_Shortcode {
 
 		ob_start();
 		require MP_AGENDA_PLUGIN_DIR . 'public/views/booking-form.php';
+		return ob_get_clean();
+	}
+
+	/**
+	 * Rendu du shortcode [mp_agenda_manage] : page publique permettant à un client
+	 * de consulter, reprogrammer ou annuler son rendez-vous. L'accès est sécurisé
+	 * par le couple appointment_id + token présent dans l'URL (même token signé
+	 * que pour l'export .ics — voir MP_Agenda_Calendar_Links).
+	 *
+	 * @param array $atts Attributs du shortcode (non utilisés).
+	 * @return string
+	 */
+	public function render_manage( $atts ) {
+		unset( $atts );
+
+		$appointment_id = isset( $_GET['appointment_id'] ) ? absint( wp_unslash( $_GET['appointment_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$token          = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		$mp_manage_valid = MP_Agenda_Calendar_Links::verify_token( $appointment_id, $token );
+		$mp_appointment  = $mp_manage_valid ? MP_Agenda_DB::get_appointment( $appointment_id ) : null;
+
+		ob_start();
+		require MP_AGENDA_PLUGIN_DIR . 'public/views/manage-form.php';
 		return ob_get_clean();
 	}
 

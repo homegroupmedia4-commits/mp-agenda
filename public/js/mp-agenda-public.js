@@ -658,6 +658,30 @@
 			'</dl>';
 	};
 
+	MPAgendaBooking.prototype.renderCalendarButtons = function ( calendar ) {
+		var wrap = document.getElementById( 'mp-agenda-calendar-add' );
+		if ( ! wrap ) {
+			return;
+		}
+
+		if ( ! calendar || ( ! calendar.google && ! calendar.ics ) ) {
+			wrap.hidden = true;
+			return;
+		}
+
+		wrap.querySelectorAll( '.mp-agenda-calendar-btn' ).forEach( function ( link ) {
+			var type = link.dataset.calendar;
+			if ( 'google' === type ) {
+				link.href = calendar.google || '#';
+			} else {
+				// Outlook et Apple Calendar ouvrent tous deux le fichier .ics.
+				link.href = calendar.ics || '#';
+			}
+		} );
+
+		wrap.hidden = false;
+	};
+
 	MPAgendaBooking.prototype.bindSubmit = function () {
 		var self = this;
 		this.form.addEventListener( 'submit', function ( e ) {
@@ -695,6 +719,7 @@
 			.then( function ( data ) {
 				document.getElementById( 'mp-agenda-success-message' ).textContent =
 					'Merci ' + payload.client_name + ', votre rendez-vous est enregistré. Un email de confirmation vous sera envoyé si vous avez renseigné votre adresse.';
+				self.renderCalendarButtons( data && data.appointment ? data.appointment.calendar : null );
 				self.goToStep( 'success' );
 			} )
 			.catch( function ( err ) {

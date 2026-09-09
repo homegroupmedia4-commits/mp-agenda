@@ -511,6 +511,113 @@
 	margin: 0 auto 16px;
 }
 
+/* Boutons "Ajouter au calendrier" (page de confirmation) */
+.mp-agenda-calendar-add {
+	margin-top: 24px;
+}
+.mp-agenda-calendar-add-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--mp-text-secondary);
+	margin: 0 0 10px;
+}
+.mp-agenda-calendar-add-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: center;
+}
+.mp-agenda-calendar-btn {
+	display: inline-block;
+	padding: 10px 20px;
+	border-radius: 6px;
+	background: #fff;
+	border: 1px solid #e5e7eb;
+	color: #1e293b;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mp-agenda-calendar-btn:hover {
+	border-color: var(--mp-primary);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Page publique "Gérer mon rendez-vous" */
+.mp-agenda-manage {
+	--mp-primary: #61CE70;
+	--mp-primary-dark: #4db85c;
+	--mp-primary-soft: #f0fdf4;
+	--mp-success: #16a34a;
+	--mp-danger: #dc2626;
+	--mp-text: #1e293b;
+	--mp-text-secondary: #64748b;
+	--mp-border: #e5e7eb;
+	--mp-bg: #f8fafc;
+	font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	color: var(--mp-text);
+	max-width: 640px;
+	margin: 0 auto;
+	box-sizing: border-box;
+}
+.mp-agenda-manage * {
+	box-sizing: border-box;
+}
+.mp-agenda-manage .mp-agenda-recap {
+	margin-bottom: 20px;
+}
+.mp-agenda-manage-section {
+	margin-top: 24px;
+}
+.mp-agenda-manage-section h3 {
+	font-size: 17px;
+	margin: 0 0 14px;
+}
+.mp-agenda-manage-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin-top: 20px;
+}
+.mp-agenda-manage-cancel {
+	margin-top: 28px;
+	padding-top: 20px;
+	border-top: 1px solid var(--mp-border);
+}
+.mp-agenda-manage .mp-agenda-text-secondary {
+	font-size: 13px;
+	color: var(--mp-text-secondary);
+	margin: 0 0 12px;
+}
+.mp-agenda-manage h2 {
+	font-size: 20px;
+	margin: 0 0 18px;
+}
+.mp-agenda-btn-danger {
+	background: #fff;
+	border: 1px solid #fecaca;
+	color: var(--mp-danger);
+}
+.mp-agenda-btn-danger:hover {
+	background: #fef2f2;
+}
+.mp-agenda-manage-message {
+	border-radius: 8px;
+	padding: 12px 16px;
+	font-size: 14px;
+	margin: 16px 0;
+}
+.mp-agenda-manage-message.is-success {
+	background: #dcfce7;
+	color: var(--mp-success);
+}
+.mp-agenda-manage-message.is-error {
+	background: #fef2f2;
+	border: 1px solid #fecaca;
+	color: var(--mp-danger);
+}
+
 /* Responsive */
 @media (max-width: 767px) {
 	.mp-agenda-booking {

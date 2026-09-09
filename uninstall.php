@@ -40,8 +40,15 @@ foreach ( $tables as $table ) {
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 }
 
+// Supprime la page publique "Gérer mon rendez-vous" créée à l'activation.
+$mp_manage_page_id = (int) get_option( 'mp_agenda_manage_page_id' );
+if ( $mp_manage_page_id ) {
+	wp_delete_post( $mp_manage_page_id, true );
+}
+
 $options = array(
 	'mp_agenda_db_version',
+	'mp_agenda_manage_page_id',
 	'mp_agenda_settings',
 	'mp_agenda_intervention_types',
 	'mp_agenda_google_client_id',

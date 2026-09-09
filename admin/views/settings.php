@@ -21,7 +21,18 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 <div class="wrap mp-agenda-wrap">
 	<h1 class="mp-agenda-title"><?php esc_html_e( 'Réglages MP Agenda', 'mp-agenda' ); ?></h1>
 
-	<?php if ( isset( $_GET['mp_agenda_notice'] ) ) : ?>
+	<?php
+	$mp_notice = isset( $_GET['mp_agenda_notice'] ) ? sanitize_key( wp_unslash( $_GET['mp_agenda_notice'] ) ) : '';
+	if ( 'test_reminder_sent' === $mp_notice ) :
+		?>
+		<div class="notice notice-success is-dismissible mp-agenda-notice">
+			<p><?php esc_html_e( 'Email de rappel test envoyé.', 'mp-agenda' ); ?></p>
+		</div>
+	<?php elseif ( 'test_reminder_failed' === $mp_notice ) : ?>
+		<div class="notice notice-error is-dismissible mp-agenda-notice">
+			<p><?php esc_html_e( 'Impossible d\'envoyer l\'email de rappel test (adresse email invalide).', 'mp-agenda' ); ?></p>
+		</div>
+	<?php elseif ( '' !== $mp_notice ) : ?>
 		<div class="notice notice-success is-dismissible mp-agenda-notice">
 			<p><?php esc_html_e( 'Réglages enregistrés.', 'mp-agenda' ); ?></p>
 		</div>
@@ -141,6 +152,7 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
 			<?php wp_nonce_field( 'mp_agenda_save_settings' ); ?>
 			<input type="hidden" name="action" value="mp_agenda_save_settings" />
+			<input type="hidden" name="mp_agenda_notifications_tab" value="1" />
 			<input type="hidden" name="company_name" value="<?php echo esc_attr( $mp_settings['company_name'] ?? '' ); ?>" />
 			<input type="hidden" name="notification_email" value="<?php echo esc_attr( $mp_settings['notification_email'] ?? '' ); ?>" />
 			<input type="hidden" name="default_duration" value="<?php echo esc_attr( $mp_settings['default_duration'] ?? 60 ); ?>" />
@@ -160,11 +172,20 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 				</label>
 			</div>
 
+			<div class="mp-agenda-field">
+				<label class="mp-agenda-toggle">
+					<input type="checkbox" name="notify_reminder" value="1" <?php checked( ! array_key_exists( 'notify_reminder', $mp_settings ) || ! empty( $mp_settings['notify_reminder'] ) ); ?> />
+					<span><?php esc_html_e( 'Envoyer un email de rappel 24 heures avant le rendez-vous', 'mp-agenda' ); ?></span>
+				</label>
+			</div>
+
 			<p class="description"><?php esc_html_e( 'Les modèles d\'emails se trouvent dans /templates/emails/ et peuvent être personnalisés par un développeur.', 'mp-agenda' ); ?></p>
 
 			<div class="mp-agenda-form-actions">
 				<button type="submit" class="button button-primary"><?php esc_html_e( 'Enregistrer', 'mp-agenda' ); ?></button>
+				<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=mp_agenda_send_test_reminder' ), 'mp_agenda_send_test_reminder' ) ); ?>"><?php esc_html_e( 'Envoyer un rappel test', 'mp-agenda' ); ?></a>
 			</div>
+			<p class="description"><?php esc_html_e( 'Le rappel test est envoyé à l\'adresse d\'envoi des notifications (ou à l\'email administrateur du site).', 'mp-agenda' ); ?></p>
 		</form>
 
 	<?php elseif ( 'gdpr' === $mp_active_tab ) : ?>

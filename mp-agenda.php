@@ -3,7 +3,7 @@
  * Plugin Name:       MP Agenda
  * Plugin URI:         https://mp-renov.fr/
  * Description:       Système de prise de rendez-vous simplifié pour MP Rénov, avec planning visuel, formulaire client et synchronisation Google Agenda.
- * Version:           1.5.0
+ * Version:           1.6.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:             MP Rénov
@@ -39,8 +39,8 @@ if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
 /**
  * Constantes globales du plugin.
  */
-define( 'MP_AGENDA_VERSION', '1.5.0' );
-define( 'MP_AGENDA_DB_VERSION', '1.4.0' );
+define( 'MP_AGENDA_VERSION', '1.6.0' );
+define( 'MP_AGENDA_DB_VERSION', '1.6.0' );
 define( 'MP_AGENDA_PLUGIN_FILE', __FILE__ );
 define( 'MP_AGENDA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'MP_AGENDA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -52,6 +52,7 @@ define( 'MP_AGENDA_PLUGIN_BASENAME', plugin_basename( __FILE__ ) );
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-activator.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-deactivator.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-db.php';
+require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-calendar-links.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-google-sync.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-notifications.php';
 require_once MP_AGENDA_PLUGIN_DIR . 'includes/class-mp-agenda-rest-api.php';

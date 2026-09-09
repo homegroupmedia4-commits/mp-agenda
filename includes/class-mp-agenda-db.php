@@ -365,6 +365,59 @@ class MP_Agenda_DB {
 	}
 
 	/**
+	 * Récupère les rendez-vous confirmés dont le début tombe dans une plage donnée
+	 * et pour lesquels aucun rappel n'a encore été envoyé (reminder_sent = 0).
+	 *
+	 * Utilisé par le cron horaire mp_agenda_send_reminders_cron. En cas d'erreur SQL
+	 * (colonne reminder_sent pas encore ajoutée), retourne un tableau vide plutôt
+	 * que de faire échouer le cron.
+	 *
+	 * @param string $from Date/heure de début de la fenêtre (Y-m-d H:i:s).
+	 * @param string $to   Date/heure de fin de la fenêtre (Y-m-d H:i:s).
+	 * @return array
+	 */
+	public static function get_appointments_needing_reminder( $from, $to ) {
+		global $wpdb;
+		$table    = self::table_appointments();
+		$tech     = self::table_technicians();
+		$services = self::table_services();
+
+		$sql = $wpdb->prepare(
+			"SELECT a.*, t.name AS technician_name, s.name AS service_name FROM {$table} a
+			LEFT JOIN {$tech} t ON t.id = a.technician_id
+			LEFT JOIN {$services} s ON s.id = a.service_id
+			WHERE a.status = 'confirmed'
+			AND a.reminder_sent = 0
+			AND a.start_datetime >= %s
+			AND a.start_datetime <= %s
+			ORDER BY a.start_datetime ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$from,
+			$to
+		);
+
+		$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		if ( '' !== $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[MP Agenda] get_appointments_needing_reminder : ' . $wpdb->last_error );
+			return array();
+		}
+
+		return is_array( $results ) ? $results : array();
+	}
+
+	/**
+	 * Marque un rendez-vous comme ayant reçu son rappel (reminder_sent = 1).
+	 *
+	 * @param int $id ID du rendez-vous.
+	 * @return void
+	 */
+	public static function mark_reminder_sent( $id ) {
+		global $wpdb;
+		$wpdb->update( self::table_appointments(), array( 'reminder_sent' => 1 ), array( 'id' => absint( $id ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+	}
+
+	/**
 	 * Crée ou met à jour un rendez-vous.
 	 *
 	 * @param array    $data Données du rendez-vous.

@@ -83,6 +83,9 @@ class MP_Agenda {
 		add_action( 'admin_init', array( 'MP_Agenda_Activator', 'maybe_upgrade' ) );
 		add_filter( 'cron_schedules', array( $this, 'add_cron_interval' ) ); // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
 
+		// Cron horaire : rappel email ~24 h avant le rendez-vous.
+		add_action( 'mp_agenda_send_reminders_cron', array( $this->notifications, 'send_due_reminders' ) );
+
 		$this->admin->init();
 		$this->public_area->init();
 		$this->rest_api->init();

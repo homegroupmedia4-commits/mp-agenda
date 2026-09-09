@@ -4,7 +4,7 @@ Tags: rendez-vous, planning, calendrier, google agenda, réservation
 Requires at least: 6.4
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -20,6 +20,8 @@ MP Agenda est un plugin de prise de rendez-vous épuré, pensé pour une petite 
 * Un formulaire de réservation client en 6 étapes via le shortcode `[mp_agenda_booking]`.
 * Une synchronisation bidirectionnelle avec Google Agenda (OAuth 2.0).
 * Des notifications email automatiques (client et commercial).
+* Des boutons "Ajouter au calendrier" (Google, Outlook, Apple) pour le client, après réservation et dans l'email de confirmation.
+* Une page publique "Gérer mon rendez-vous" (`[mp_agenda_manage]`) permettant au client de reprogrammer ou d'annuler son rendez-vous via un lien sécurisé.
 * Un export CSV des rendez-vous.
 * Une mention RGPD personnalisable sous le formulaire client.
 
@@ -42,6 +44,14 @@ Non, la synchronisation Google Agenda est optionnelle. Le plugin fonctionne plei
 Oui, la page "Commerciaux" permet d'ajouter, modifier ou supprimer autant de commerciaux que nécessaire.
 
 == Changelog ==
+
+= 1.6.0 =
+* Ajout : boutons "Ajouter au calendrier" (Google Agenda, Outlook, Apple Calendar) pour le client — à l'étape de confirmation du formulaire de réservation et dans l'email de confirmation. Génération d'un fichier .ics standard servi via une route publique sécurisée par token signé (hash_hmac + wp_salt).
+* Ajout : shortcode `[mp_agenda_manage]` et page WordPress "Gérer mon rendez-vous" (créée automatiquement à l'activation, ID stocké dans l'option mp_agenda_manage_page_id). Le client peut y consulter son rendez-vous, le reprogrammer (mêmes contrôles de disponibilité que la réservation, mise à jour de l'événement Google) ou l'annuler. Accès sécurisé par le même token signé.
+* Ajout : lien "Modifier mon rendez-vous" dans l'email de confirmation client (à côté du lien d'annulation existant) et mention "Le client peut modifier ou annuler ce rendez-vous" dans l'email commercial.
+* Ajout : emails de suivi (client + commercial) lors d'une modification ou d'une annulation faite depuis la page publique.
+* Ajout : rappel automatique par email au client ~24 h avant le rendez-vous (nouveau template reminder-client.php avec les boutons calendrier et les liens modifier/annuler). Cron horaire mp_agenda_send_reminders_cron avec fenêtre glissante de 2 h (résiste à un cron WP en retard), flag reminder_sent en base pour ne jamais envoyer deux rappels. Nouveau réglage "Envoyer un email de rappel 24 heures avant le rendez-vous" (coché par défaut) dans Réglages > Notifications, avec bouton "Envoyer un rappel test".
+* Le formulaire de réservation, les emails existants, le planning et la synchronisation Google restent inchangés.
 
 = 1.5.0 =
 * Ajout : vue "Mois" dans le planning admin — calendrier mensuel classique (grille 7 colonnes) affichant, pour chaque jour, la liste des RDV (heure, nom du client, commercial) colorés par statut ainsi que les créneaux bloqués en gris. Navigation par mois, clic sur un jour pour basculer en vue Jour, clic sur un RDV pour ouvrir la modal d'édition. Le filtre par commercial s'applique aussi en vue Mois.

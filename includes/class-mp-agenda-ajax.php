@@ -42,6 +42,11 @@ class MP_Agenda_Ajax {
 	public function init() {
 		add_action( 'wp_ajax_mp_agenda_api', array( $this, 'handle_request' ) );
 		add_action( 'wp_ajax_nopriv_mp_agenda_api', array( $this, 'handle_request' ) );
+
+		// Téléchargement du fichier .ics (lien direct GET dans l'email de confirmation
+		// et sur la page de confirmation front — sécurisé par token signé, pas de nonce).
+		add_action( 'wp_ajax_mp_agenda_calendar_export', array( $this, 'handle_calendar_export' ) );
+		add_action( 'wp_ajax_nopriv_mp_agenda_calendar_export', array( $this, 'handle_calendar_export' ) );
 	}
 
 	/**
@@ -157,6 +162,41 @@ class MP_Agenda_Ajax {
 	}
 
 	/**
+	 * Sert le fichier .ics d'un rendez-vous (route publique GET /calendar-export).
+	 *
+	 * Accès sécurisé par le token signé (hash_hmac + wp_salt) : sans le bon token,
+	 * aucune donnée n'est renvoyée.
+	 *
+	 * @return void
+	 */
+	public function handle_calendar_export() {
+		$appointment_id = isset( $_GET['appointment_id'] ) ? absint( wp_unslash( $_GET['appointment_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$token          = isset( $_GET['token'] ) ? sanitize_text_field( wp_unslash( $_GET['token'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! MP_Agenda_Calendar_Links::verify_token( $appointment_id, $token ) ) {
+			status_header( 403 );
+			wp_die( esc_html__( 'Lien de calendrier invalide ou expiré.', 'mp-agenda' ) );
+		}
+
+		$appointment = MP_Agenda_DB::get_appointment( $appointment_id );
+
+		if ( ! $appointment ) {
+			status_header( 404 );
+			wp_die( esc_html__( 'Rendez-vous introuvable.', 'mp-agenda' ) );
+		}
+
+		$ics = MP_Agenda_Calendar_Links::generate_ics( $appointment );
+
+		nocache_headers();
+		header( 'Content-Type: text/calendar; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename="rdv-mp-agenda.ics"' );
+		header( 'Content-Length: ' . strlen( $ics ) );
+
+		echo $ics; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		exit;
+	}
+
+	/**
 	 * Fait correspondre une route + méthode HTTP à la méthode MP_Agenda_REST_API
 	 * équivalente et au type de permission requis, en miroir de register_routes().
 	 *
@@ -166,16 +206,19 @@ class MP_Agenda_Ajax {
 	 */
 	private function match_route( $route, $method ) {
 		$static_routes = array(
-			'GET /appointments'       => array( 'get_appointments', 'admin' ),
-			'POST /appointments'      => array( 'create_appointment', 'admin' ),
-			'GET /blocked-slots'      => array( 'get_blocked_slots', 'admin' ),
-			'GET /technicians'        => array( 'get_technicians', 'public' ),
-			'GET /showrooms'          => array( 'get_showrooms', 'public' ),
-			'GET /services'           => array( 'get_services', 'public' ),
-			'GET /available-slots'    => array( 'get_available_slots', 'public' ),
-			'POST /book'              => array( 'book_appointment', 'public' ),
-			'POST /google/sync'       => array( 'force_google_sync', 'admin' ),
-			'POST /google/disconnect' => array( 'disconnect_google', 'admin' ),
+			'GET /appointments'               => array( 'get_appointments', 'admin' ),
+			'POST /appointments'              => array( 'create_appointment', 'admin' ),
+			'GET /blocked-slots'              => array( 'get_blocked_slots', 'admin' ),
+			'GET /appointments/manage'        => array( 'manage_get_appointment', 'public' ),
+			'PUT /appointments/manage'        => array( 'manage_update_appointment', 'public' ),
+			'POST /appointments/manage/cancel' => array( 'manage_cancel_appointment', 'public' ),
+			'GET /technicians'                => array( 'get_technicians', 'public' ),
+			'GET /showrooms'                  => array( 'get_showrooms', 'public' ),
+			'GET /services'                   => array( 'get_services', 'public' ),
+			'GET /available-slots'            => array( 'get_available_slots', 'public' ),
+			'POST /book'                     => array( 'book_appointment', 'public' ),
+			'POST /google/sync'               => array( 'force_google_sync', 'admin' ),
+			'POST /google/disconnect'         => array( 'disconnect_google', 'admin' ),
 		);
 
 		$key = $method . ' ' . $route;

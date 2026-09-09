@@ -28,6 +28,7 @@ class MP_Agenda_Activator {
 		self::seed_default_showrooms();
 		self::seed_default_services();
 		self::set_default_options();
+		self::create_manage_page();
 		self::schedule_cron();
 
 		update_option( 'mp_agenda_db_version', MP_AGENDA_DB_VERSION );
@@ -56,6 +57,7 @@ class MP_Agenda_Activator {
 
 		self::seed_default_showrooms();
 		self::seed_default_services();
+		self::create_manage_page();
 
 		update_option( 'mp_agenda_db_version', MP_AGENDA_DB_VERSION );
 	}
@@ -113,6 +115,7 @@ class MP_Agenda_Activator {
 			google_event_id VARCHAR(255) DEFAULT NULL,
 			source VARCHAR(20) NOT NULL DEFAULT 'admin',
 			cancel_token VARCHAR(64) DEFAULT NULL,
+			reminder_sent TINYINT(1) NOT NULL DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
@@ -174,6 +177,24 @@ class MP_Agenda_Activator {
 
 		self::add_showroom_id_column();
 		self::add_service_id_column();
+		self::add_reminder_sent_column();
+	}
+
+	/**
+	 * Ajoute la colonne reminder_sent à la table des rendez-vous si elle n'existe
+	 * pas déjà (flag "rappel 24 h envoyé", utilisé par le cron mp_agenda_send_reminders_cron).
+	 *
+	 * @return void
+	 */
+	private static function add_reminder_sent_column() {
+		global $wpdb;
+
+		$table  = $wpdb->prefix . 'mp_agenda_appointments';
+		$exists = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM ' . $table . ' LIKE %s', 'reminder_sent' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( empty( $exists ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN reminder_sent TINYINT(1) NOT NULL DEFAULT 0 AFTER cancel_token" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
 	}
 
 	/**
@@ -376,6 +397,7 @@ class MP_Agenda_Activator {
 					'timezone'              => wp_timezone_string(),
 					'notify_client'         => 1,
 					'notify_technician'     => 1,
+					'notify_reminder'       => 1,
 					'require_technician_choice' => 0,
 				)
 			);
@@ -401,6 +423,41 @@ class MP_Agenda_Activator {
 	}
 
 	/**
+	 * Crée (une seule fois) la page WordPress "Gérer mon rendez-vous" contenant le
+	 * shortcode [mp_agenda_manage], et mémorise son ID dans l'option
+	 * mp_agenda_manage_page_id. La page est publiée (les clients doivent pouvoir
+	 * l'ouvrir sans être connectés) mais volontairement discrète : elle n'est
+	 * ajoutée à aucun menu et est exclue de la recherche / des moteurs
+	 * (voir MP_Agenda_Public).
+	 *
+	 * @return void
+	 */
+	private static function create_manage_page() {
+		$existing = (int) get_option( 'mp_agenda_manage_page_id' );
+
+		if ( $existing && 'page' === get_post_type( $existing ) && 'trash' !== get_post_status( $existing ) ) {
+			return;
+		}
+
+		$page_id = wp_insert_post(
+			array(
+				'post_title'   => __( 'Gérer mon rendez-vous', 'mp-agenda' ),
+				'post_name'    => 'gerer-mon-rendez-vous',
+				'post_content' => '[mp_agenda_manage]',
+				'post_status'  => 'publish',
+				'post_type'    => 'page',
+				'comment_status' => 'closed',
+				'ping_status'  => 'closed',
+			)
+		);
+
+		if ( $page_id && ! is_wp_error( $page_id ) ) {
+			update_option( 'mp_agenda_manage_page_id', (int) $page_id );
+			update_post_meta( (int) $page_id, '_mp_agenda_manage_page', 1 );
+		}
+	}
+
+	/**
 	 * Planifie la tâche cron de synchronisation Google Agenda (toutes les 5 minutes)
 	 * ainsi que la vérification quotidienne des tokens (MP_Agenda_Google_Sync::check_all_tokens()).
 	 *
@@ -413,6 +470,10 @@ class MP_Agenda_Activator {
 
 		if ( ! wp_next_scheduled( 'mp_agenda_google_token_check_cron' ) ) {
 			wp_schedule_event( time(), 'daily', 'mp_agenda_google_token_check_cron' );
+		}
+
+		if ( ! wp_next_scheduled( 'mp_agenda_send_reminders_cron' ) ) {
+			wp_schedule_event( time(), 'hourly', 'mp_agenda_send_reminders_cron' );
 		}
 	}
 }

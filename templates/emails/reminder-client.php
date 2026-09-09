@@ -1,6 +1,6 @@
 <?php
 /**
- * Template email : confirmation de rendez-vous envoyée au client.
+ * Template email : rappel de rendez-vous envoyé au client ~24 h avant.
  *
  * Variables disponibles : $appointment, $technician, $settings, $date, $cancel_url,
  * $manage_url, $calendar_links (array google|ics|manage).
@@ -12,10 +12,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$company_name    = $settings['company_name'] ?? get_bloginfo( 'name' );
-$manage_url      = $manage_url ?? '';
-$calendar_links  = isset( $calendar_links ) && is_array( $calendar_links ) ? $calendar_links : array();
+$company_name     = $settings['company_name'] ?? get_bloginfo( 'name' );
+$manage_url       = $manage_url ?? '';
+$cancel_url       = $cancel_url ?? '';
+$calendar_links   = isset( $calendar_links ) && is_array( $calendar_links ) ? $calendar_links : array();
 $mp_cal_btn_style = 'display:inline-block;padding:10px 20px;border-radius:6px;background:#ffffff;border:1px solid #e5e7eb;color:#1E293B;text-decoration:none;font-size:13px;font-weight:600;margin:4px 6px 4px 0;';
+
+$mp_technician_name = ! empty( $appointment['technician_name'] ) ? $appointment['technician_name'] : ( $technician['name'] ?? '' );
+$mp_service_name    = ! empty( $appointment['service_name'] ) ? $appointment['service_name'] : ( $appointment['intervention_type'] ?? '' );
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -34,16 +38,16 @@ $mp_cal_btn_style = 'display:inline-block;padding:10px 20px;border-radius:6px;ba
 					</tr>
 					<tr>
 						<td style="padding:32px;">
-							<h2 style="font-size:20px;margin:0 0 16px;">Votre rendez-vous est confirmé</h2>
+							<h2 style="font-size:20px;margin:0 0 16px;">Rappel de votre rendez-vous</h2>
 							<p style="font-size:14px;line-height:1.6;">Bonjour <?php echo esc_html( $appointment['client_name'] ); ?>,</p>
-							<p style="font-size:14px;line-height:1.6;">Votre rendez-vous a bien été enregistré avec les détails suivants :</p>
+							<p style="font-size:14px;line-height:1.6;">Nous vous rappelons votre rendez-vous prévu demain :</p>
 
 							<table role="presentation" width="100%" cellpadding="8" cellspacing="0" style="background:#f8fafc;border-radius:8px;font-size:14px;">
-								<tr><td><strong>Commercial</strong></td><td><?php echo esc_html( $technician['name'] ?? '' ); ?></td></tr>
+								<tr><td><strong>Commercial</strong></td><td><?php echo esc_html( $mp_technician_name ); ?></td></tr>
 								<tr><td><strong>Date</strong></td><td><?php echo esc_html( $date->format( 'd/m/Y' ) ); ?></td></tr>
 								<tr><td><strong>Heure</strong></td><td><?php echo esc_html( $date->format( 'H:i' ) ); ?></td></tr>
-								<tr><td><strong>Adresse</strong></td><td><?php echo esc_html( $appointment['client_address'] ); ?></td></tr>
-								<tr><td><strong>Service</strong></td><td><?php echo esc_html( ! empty( $appointment['service_name'] ) ? $appointment['service_name'] : $appointment['intervention_type'] ); ?></td></tr>
+								<tr><td><strong>Adresse</strong></td><td><?php echo esc_html( $appointment['client_address'] ?? '' ); ?></td></tr>
+								<tr><td><strong>Service</strong></td><td><?php echo esc_html( $mp_service_name ); ?></td></tr>
 							</table>
 
 							<?php if ( ! empty( $calendar_links ) ) : ?>
@@ -61,11 +65,15 @@ $mp_cal_btn_style = 'display:inline-block;padding:10px 20px;border-radius:6px;ba
 
 							<p style="font-size:13px;line-height:1.6;margin-top:24px;">
 								<?php if ( ! empty( $manage_url ) ) : ?>
-									Besoin de changer d'horaire ?
 									<a href="<?php echo esc_url( $manage_url ); ?>" style="color:#1E293B;">Modifier mon rendez-vous</a><br />
 								<?php endif; ?>
-								Besoin d'annuler ce rendez-vous ?
-								<a href="<?php echo esc_url( $cancel_url ); ?>" style="color:#dc2626;">Annuler mon rendez-vous</a>
+								<?php if ( ! empty( $cancel_url ) ) : ?>
+									<a href="<?php echo esc_url( $cancel_url ); ?>" style="color:#dc2626;">Annuler mon rendez-vous</a>
+								<?php endif; ?>
+							</p>
+
+							<p style="font-size:13px;line-height:1.6;color:#64748b;margin-top:16px;">
+								Si vous ne pouvez pas venir, merci de nous prévenir en modifiant ou annulant votre rendez-vous.
 							</p>
 						</td>
 					</tr>

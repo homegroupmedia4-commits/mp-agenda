@@ -157,6 +157,33 @@ class MP_Agenda_REST_API {
 
 		register_rest_route(
 			$this->namespace,
+			'/appointments/manage',
+			array(
+				array(
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => array( $this, 'manage_get_appointment' ),
+					'permission_callback' => array( $this, 'public_permission_callback' ),
+				),
+				array(
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => array( $this, 'manage_update_appointment' ),
+					'permission_callback' => array( $this, 'public_permission_callback' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
+			'/appointments/manage/cancel',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'manage_cancel_appointment' ),
+				'permission_callback' => array( $this, 'public_permission_callback' ),
+			)
+		);
+
+		register_rest_route(
+			$this->namespace,
 			'/google/sync',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -922,19 +949,220 @@ class MP_Agenda_REST_API {
 			error_log( '[MP Agenda] notifications sent' );
 		}
 
+		$response_appointment = array(
+			'id'                => $appointment['id'] ?? $id,
+			'technician_name'   => $technician['name'],
+			'start_datetime'    => $appointment['start_datetime'] ?? $start_dt->format( 'Y-m-d H:i:s' ),
+			'end_datetime'      => $appointment['end_datetime'] ?? $end_dt->format( 'Y-m-d H:i:s' ),
+			'intervention_type' => $appointment['intervention_type'] ?? $intervention,
+			'service_name'      => $appointment['service_name'] ?? null,
+			'client_address'    => $appointment['client_address'] ?? $client_address,
+		);
+
+		// Liens "Ajouter au calendrier" prêts à l'emploi (Google + .ics via admin-ajax.php).
+		$response_appointment['calendar'] = $appointment
+			? MP_Agenda_Calendar_Links::all_links( $appointment )
+			: null;
+
 		return new WP_REST_Response(
 			array(
 				'success'     => true,
-				'appointment' => array(
-					'id'                => $appointment['id'] ?? $id,
-					'technician_name'   => $technician['name'],
-					'start_datetime'    => $appointment['start_datetime'] ?? $start_dt->format( 'Y-m-d H:i:s' ),
-					'intervention_type' => $appointment['intervention_type'] ?? $intervention,
-					'service_name'      => $appointment['service_name'] ?? null,
-				),
+				'appointment' => $response_appointment,
 			),
 			201
 		);
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Gestion publique du rendez-vous par le client (lien token dans l'email)
+	 * ------------------------------------------------------------------- */
+
+	/**
+	 * Vérifie le couple appointment_id + token et retourne le rendez-vous associé.
+	 *
+	 * @param WP_REST_Request $request Requête REST.
+	 * @return array|WP_Error Rendez-vous, ou WP_Error si le token est invalide / le RDV introuvable.
+	 */
+	private function resolve_managed_appointment( WP_REST_Request $request ) {
+		$appointment_id = absint( $request->get_param( 'appointment_id' ) );
+		$token          = (string) $request->get_param( 'token' );
+
+		if ( ! MP_Agenda_Calendar_Links::verify_token( $appointment_id, $token ) ) {
+			return new WP_Error( 'mp_agenda_forbidden', __( 'Lien invalide ou expiré.', 'mp-agenda' ), array( 'status' => 403 ) );
+		}
+
+		$appointment = MP_Agenda_DB::get_appointment( $appointment_id );
+
+		if ( ! $appointment ) {
+			return new WP_Error( 'mp_agenda_not_found', __( 'Rendez-vous introuvable.', 'mp-agenda' ), array( 'status' => 404 ) );
+		}
+
+		return $appointment;
+	}
+
+	/**
+	 * Met en forme les données d'un rendez-vous exposées à la page publique de gestion
+	 * (aucune donnée interne : pas de notes internes, pas de token/identifiants Google).
+	 *
+	 * @param array $appointment Rendez-vous brut.
+	 * @return array
+	 */
+	private function format_managed_appointment( $appointment ) {
+		$technician    = MP_Agenda_DB::get_technician( $appointment['technician_id'] );
+		$working_hours = $technician ? json_decode( (string) $technician['working_hours'], true ) : array();
+
+		$duration = (int) ( $appointment['duration'] ?? 0 );
+		if ( ! $duration && ! empty( $appointment['start_datetime'] ) && ! empty( $appointment['end_datetime'] ) ) {
+			$duration = (int) round( ( strtotime( $appointment['end_datetime'] ) - strtotime( $appointment['start_datetime'] ) ) / 60 );
+		}
+
+		return array(
+			'id'                => (int) $appointment['id'],
+			'status'            => $appointment['status'],
+			'client_name'       => $appointment['client_name'],
+			'client_address'    => $appointment['client_address'],
+			'technician_id'     => (int) $appointment['technician_id'],
+			'technician_name'   => $appointment['technician_name'] ?? ( $technician['name'] ?? '' ),
+			'service_name'      => ! empty( $appointment['service_name'] ) ? $appointment['service_name'] : ( $appointment['intervention_type'] ?? '' ),
+			'start_datetime'    => $appointment['start_datetime'],
+			'end_datetime'      => $appointment['end_datetime'],
+			'duration'          => $duration ?: 60,
+			'working_hours'     => is_array( $working_hours ) ? $working_hours : array(),
+			'calendar'          => MP_Agenda_Calendar_Links::all_links( $appointment ),
+		);
+	}
+
+	/**
+	 * Retourne le récapitulatif d'un rendez-vous pour la page publique de gestion.
+	 *
+	 * @param WP_REST_Request $request Requête REST.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function manage_get_appointment( WP_REST_Request $request ) {
+		$appointment = $this->resolve_managed_appointment( $request );
+
+		if ( is_wp_error( $appointment ) ) {
+			return $appointment;
+		}
+
+		return new WP_REST_Response( $this->format_managed_appointment( $appointment ), 200 );
+	}
+
+	/**
+	 * Reprogramme un rendez-vous depuis la page publique de gestion (nouvelle
+	 * date/heure). Rejoue les mêmes contrôles de disponibilité que book_appointment.
+	 *
+	 * @param WP_REST_Request $request Requête REST.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function manage_update_appointment( WP_REST_Request $request ) {
+		$appointment = $this->resolve_managed_appointment( $request );
+
+		if ( is_wp_error( $appointment ) ) {
+			return $appointment;
+		}
+
+		if ( 'cancelled' === $appointment['status'] ) {
+			return new WP_Error( 'mp_agenda_cancelled', __( 'Ce rendez-vous a déjà été annulé.', 'mp-agenda' ), array( 'status' => 409 ) );
+		}
+
+		$technician_id = (int) $appointment['technician_id'];
+		$duration      = (int) ( $appointment['duration'] ?? 0 ) ?: 60;
+
+		$date = sanitize_text_field( (string) $request->get_param( 'date' ) );
+		$time = sanitize_text_field( (string) $request->get_param( 'time' ) );
+
+		if ( $date && $time ) {
+			$start_dt = DateTime::createFromFormat( 'Y-m-d H:i', $date . ' ' . $time );
+		} else {
+			$start_raw = sanitize_text_field( (string) $request->get_param( 'start_datetime' ) );
+			$start_dt  = $start_raw ? date_create( $start_raw ) : false;
+		}
+
+		if ( ! $start_dt ) {
+			return new WP_Error( 'mp_agenda_invalid', __( 'Date ou heure invalide.', 'mp-agenda' ), array( 'status' => 400 ) );
+		}
+
+		$end_dt = clone $start_dt;
+		$end_dt->modify( '+' . $duration . ' minutes' );
+
+		$start_sql = $start_dt->format( 'Y-m-d H:i:s' );
+		$end_sql   = $end_dt->format( 'Y-m-d H:i:s' );
+
+		if ( $start_sql === $appointment['start_datetime'] ) {
+			return new WP_Error( 'mp_agenda_invalid', __( 'Merci de choisir un nouveau créneau.', 'mp-agenda' ), array( 'status' => 400 ) );
+		}
+
+		if ( ! MP_Agenda_DB::is_slot_available( $technician_id, $start_sql, $end_sql, (int) $appointment['id'] ) ) {
+			return new WP_Error( 'mp_agenda_slot_taken', __( 'Ce créneau n\'est plus disponible. Merci de choisir un autre horaire.', 'mp-agenda' ), array( 'status' => 409 ) );
+		}
+
+		$technician = MP_Agenda_DB::get_technician( $technician_id );
+		if ( $technician ) {
+			$google_sync = new MP_Agenda_Google_Sync();
+			if ( $google_sync->has_google_connected( $technician ) ) {
+				foreach ( $google_sync->get_freebusy( $technician, $start_dt->format( 'Y-m-d' ) ) as $period ) {
+					$busy_start = new DateTime( $period['start'] );
+					$busy_end   = new DateTime( $period['end'] );
+
+					if ( $start_dt < $busy_end && $end_dt > $busy_start ) {
+						return new WP_Error( 'mp_agenda_slot_taken', __( 'Ce créneau n\'est plus disponible. Veuillez en choisir un autre.', 'mp-agenda' ), array( 'status' => 409 ) );
+					}
+				}
+			}
+		}
+
+		MP_Agenda_DB::save_appointment(
+			array(
+				'start_datetime'  => $start_sql,
+				'end_datetime'    => $end_sql,
+				'duration'        => $duration,
+				'google_event_id' => $appointment['google_event_id'],
+			),
+			(int) $appointment['id']
+		);
+
+		$updated = MP_Agenda_DB::get_appointment( (int) $appointment['id'] );
+
+		$google_sync = new MP_Agenda_Google_Sync();
+		$google_sync->push_appointment( $updated );
+
+		$notifications = new MP_Agenda_Notifications();
+		$notifications->send_appointment_change_notifications( $updated, 'modified' );
+
+		return new WP_REST_Response( $this->format_managed_appointment( $updated ), 200 );
+	}
+
+	/**
+	 * Annule un rendez-vous depuis la page publique de gestion.
+	 *
+	 * @param WP_REST_Request $request Requête REST.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function manage_cancel_appointment( WP_REST_Request $request ) {
+		$appointment = $this->resolve_managed_appointment( $request );
+
+		if ( is_wp_error( $appointment ) ) {
+			return $appointment;
+		}
+
+		if ( 'cancelled' === $appointment['status'] ) {
+			return new WP_REST_Response( array( 'status' => 'cancelled' ), 200 );
+		}
+
+		MP_Agenda_DB::save_appointment( array( 'status' => 'cancelled' ), (int) $appointment['id'] );
+
+		if ( ! empty( $appointment['google_event_id'] ) ) {
+			$google_sync = new MP_Agenda_Google_Sync();
+			$google_sync->delete_event( $appointment );
+		}
+
+		$updated = MP_Agenda_DB::get_appointment( (int) $appointment['id'] );
+
+		$notifications = new MP_Agenda_Notifications();
+		$notifications->send_appointment_change_notifications( $updated, 'cancelled' );
+
+		return new WP_REST_Response( array( 'status' => 'cancelled' ), 200 );
 	}
 
 	/* ---------------------------------------------------------------------
