@@ -27,14 +27,17 @@ $mp_technicians = MP_Agenda_DB::get_technicians( true );
 			<div class="mp-agenda-view-toggle">
 				<button type="button" class="button mp-agenda-view-btn is-active" data-view="day"><?php esc_html_e( 'Jour', 'mp-agenda' ); ?></button>
 				<button type="button" class="button mp-agenda-view-btn" data-view="week"><?php esc_html_e( 'Semaine', 'mp-agenda' ); ?></button>
+				<button type="button" class="button mp-agenda-view-btn" data-view="month"><?php esc_html_e( 'Mois', 'mp-agenda' ); ?></button>
 			</div>
 		</div>
 
 		<div class="mp-agenda-toolbar-group mp-agenda-technician-filters">
-			<button type="button" class="button mp-agenda-filter-btn is-active" data-technician="all"><?php esc_html_e( 'Tous', 'mp-agenda' ); ?></button>
-			<?php foreach ( $mp_technicians as $mp_tech ) : ?>
-				<button type="button" class="button mp-agenda-filter-btn" data-technician="<?php echo esc_attr( $mp_tech['id'] ); ?>"><?php echo esc_html( $mp_tech['name'] ); ?></button>
-			<?php endforeach; ?>
+			<select class="mp-agenda-filter-select" aria-label="<?php esc_attr_e( 'Filtrer par commercial', 'mp-agenda' ); ?>">
+				<option value="all"><?php esc_html_e( 'Tous les commerciaux', 'mp-agenda' ); ?></option>
+				<?php foreach ( $mp_technicians as $mp_tech ) : ?>
+					<option value="<?php echo esc_attr( $mp_tech['id'] ); ?>"><?php echo esc_html( $mp_tech['name'] ); ?></option>
+				<?php endforeach; ?>
+			</select>
 			<button type="button" class="button mp-agenda-sync-google-btn">🔄 <?php esc_html_e( 'Synchroniser Google', 'mp-agenda' ); ?></button>
 			<span class="mp-agenda-sync-status"></span>
 			<button type="button" class="button button-primary mp-agenda-new-appointment"><?php esc_html_e( '+ Nouveau RDV', 'mp-agenda' ); ?></button>

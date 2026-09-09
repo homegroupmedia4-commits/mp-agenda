@@ -16,7 +16,6 @@ $mp_gdpr_retention           = get_option( 'mp_agenda_gdpr_retention_months', 24
 $mp_google_client_id         = get_option( 'mp_agenda_google_client_id', '' );
 $mp_google_secret            = get_option( 'mp_agenda_google_client_secret', '' );
 $mp_google_sync_mode         = get_option( 'mp_agenda_google_sync_mode', 'individual' );
-$mp_callback_url             = admin_url( 'admin-ajax.php?action=mp_agenda_google_callback' );
 $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general';
 ?>
 <div class="wrap mp-agenda-wrap">
@@ -93,9 +92,7 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 				<li><?php esc_html_e( 'Dans "API et services", activez l\'API "Google Calendar API".', 'mp-agenda' ); ?></li>
 				<li><?php esc_html_e( 'Configurez l\'écran de consentement OAuth (type externe, ajoutez votre email en tant qu\'utilisateur de test si l\'app n\'est pas publiée).', 'mp-agenda' ); ?></li>
 				<li><?php esc_html_e( 'Créez un identifiant OAuth 2.0 de type "Application Web".', 'mp-agenda' ); ?></li>
-				<li><?php esc_html_e( 'Ajoutez l\'URI de redirection autorisée suivante :', 'mp-agenda' ); ?>
-					<code><?php echo esc_html( $mp_callback_url ); ?></code>
-				</li>
+				<li><?php esc_html_e( 'Ajoutez l\'URI de redirection autorisée indiquée dans la documentation.', 'mp-agenda' ); ?></li>
 				<li><?php esc_html_e( 'Copiez le Client ID et le Client Secret ci-dessous.', 'mp-agenda' ); ?></li>
 			</ol>
 		</div>
@@ -139,12 +136,6 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 				<button type="submit" class="button button-primary"><?php esc_html_e( 'Enregistrer', 'mp-agenda' ); ?></button>
 			</div>
 		</form>
-
-		<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:16px;border-radius:8px;margin-top:16px;">
-			<p style="margin:0;">
-				<?php esc_html_e( '⚠️ Important : Si votre projet Google Cloud est en mode "Testing" (écran de consentement non publié), les tokens expirent après 7 jours et les commerciaux seront déconnectés. Pour des tokens permanents, allez dans Google Cloud Console → Google Auth Platform → Audience → cliquez "Publish app" pour passer en Production.', 'mp-agenda' ); ?>
-			</p>
-		</div>
 
 	<?php elseif ( 'notifications' === $mp_active_tab ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">

@@ -308,16 +308,13 @@
 				} );
 			} );
 
-			document.querySelectorAll( '.mp-agenda-filter-btn' ).forEach( function ( btn ) {
-				btn.addEventListener( 'click', function () {
-					document.querySelectorAll( '.mp-agenda-filter-btn' ).forEach( function ( b ) {
-						b.classList.remove( 'is-active' );
-					} );
-					btn.classList.add( 'is-active' );
-					Calendar.technicianFilter = btn.dataset.technician;
+			var filterSelect = document.querySelector( '.mp-agenda-filter-select' );
+			if ( filterSelect ) {
+				filterSelect.addEventListener( 'change', function () {
+					Calendar.technicianFilter = filterSelect.value || 'all';
 					Calendar.render();
 				} );
-			} );
+			}
 
 			document.querySelector( '.mp-agenda-new-appointment' ).addEventListener( 'click', function () {
 				Modal.openForCreate( null, formatDate( Calendar.currentDate ), null );
@@ -329,9 +326,26 @@
 		},
 
 		navigate: function ( direction ) {
+			if ( 'month' === this.view ) {
+				this.currentDate.setDate( 1 );
+				this.currentDate.setMonth( this.currentDate.getMonth() + direction );
+				this.render();
+				return;
+			}
 			var days = 'week' === this.view ? 7 : 1;
 			this.currentDate.setDate( this.currentDate.getDate() + direction * days );
 			this.render();
+		},
+
+		monthGridRange: function () {
+			var y = this.currentDate.getFullYear();
+			var m = this.currentDate.getMonth();
+			var gridStart = startOfWeek( new Date( y, m, 1 ) );
+			var lastDay = new Date( y, m + 1, 0 );
+			var gridEnd = new Date( lastDay );
+			var endDow = gridEnd.getDay();
+			gridEnd.setDate( gridEnd.getDate() + ( 0 === endDow ? 0 : 7 - endDow ) );
+			return { gridStart: gridStart, gridEnd: gridEnd, month: m };
 		},
 
 		goToday: function () {
@@ -357,6 +371,10 @@
 		},
 
 		getRange: function () {
+			if ( 'month' === this.view ) {
+				var grid = this.monthGridRange();
+				return { from: formatDate( grid.gridStart ), to: formatDate( grid.gridEnd ), start: grid.gridStart };
+			}
 			if ( 'week' === this.view ) {
 				var start = startOfWeek( this.currentDate );
 				var end = new Date( start );
@@ -384,7 +402,11 @@
 					function ( results ) {
 						var blockedSlots = results[ 1 ].items || [];
 						console.log( '[MP Agenda] Blocked slots received: ' + blockedSlots.length );
-						this.draw( range, results[ 0 ].items || [], blockedSlots );
+						if ( 'month' === this.view ) {
+							this.drawMonth( range, results[ 0 ].items || [], blockedSlots );
+						} else {
+							this.draw( range, results[ 0 ].items || [], blockedSlots );
+						}
 					}.bind( this )
 				)
 				.catch(
@@ -396,6 +418,9 @@
 
 		formatLabel: function ( range ) {
 			var months = [ 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre' ];
+			if ( 'month' === this.view ) {
+				return months[ this.currentDate.getMonth() ] + ' ' + this.currentDate.getFullYear();
+			}
 			if ( 'week' === this.view ) {
 				var start = new Date( range.from );
 				var end = new Date( range.to );
@@ -552,6 +577,127 @@
 					}
 
 					colEl.appendChild( eventEl );
+				} );
+			} );
+		},
+
+		drawMonth: function ( range, appointments, blockedSlots ) {
+			var self = this;
+			var dayNames = [ 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim' ];
+
+			var grid = this.monthGridRange();
+			var gridStart = grid.gridStart;
+			var gridEnd = grid.gridEnd;
+			var month = grid.month;
+			var totalDays = Math.round( ( gridEnd - gridStart ) / 86400000 ) + 1;
+			var totalCells = Math.ceil( totalDays / 7 ) * 7;
+
+			// Nom du commercial par identifiant (pour l'affichage dans les badges).
+			var techById = {};
+			this.technicians.forEach( function ( t ) {
+				techById[ parseInt( t.id, 10 ) ] = t.name;
+			} );
+
+			// Regroupe les événements (RDV + créneaux bloqués) par date, filtrés par commercial.
+			var allEvents = appointments.map( function ( a ) {
+				return { event: Object.assign( {}, a, { isBlocked: false } ) };
+			} ).concat(
+				blockedSlots.map( function ( b ) {
+					return { event: Object.assign( {}, b, { isBlocked: true, status: 'blocked' } ) };
+				} )
+			);
+
+			var byDate = {};
+			allEvents.forEach( function ( entry ) {
+				var ev = entry.event;
+				if ( 'all' !== self.technicianFilter && parseInt( ev.technician_id, 10 ) !== parseInt( self.technicianFilter, 10 ) ) {
+					return;
+				}
+				var start = new Date( ev.start_datetime.replace( ' ', 'T' ) );
+				var key = formatDate( start );
+				entry.start = start;
+				( byDate[ key ] = byDate[ key ] || [] ).push( entry );
+			} );
+			Object.keys( byDate ).forEach( function ( k ) {
+				byDate[ k ].sort( function ( a, b ) {
+					return a.start - b.start;
+				} );
+			} );
+
+			var todayStr = formatDate( new Date() );
+
+			var html = '<div class="mp-agenda-month">';
+			html += '<div class="mp-agenda-month-weekdays">';
+			dayNames.forEach( function ( d ) {
+				html += '<div class="mp-agenda-month-weekday">' + d + '</div>';
+			} );
+			html += '</div>';
+			html += '<div class="mp-agenda-month-grid">';
+
+			var cursor = new Date( gridStart );
+			for ( var c = 0; c < totalCells; c++ ) {
+				var dateStr = formatDate( cursor );
+				var cls = 'mp-agenda-month-cell';
+				if ( cursor.getMonth() !== month ) {
+					cls += ' is-outside';
+				}
+				if ( dateStr === todayStr ) {
+					cls += ' is-today';
+				}
+				html += '<div class="' + cls + '" data-date="' + dateStr + '">';
+				html += '<div class="mp-agenda-month-daynum">' + cursor.getDate() + '</div>';
+				html += '<div class="mp-agenda-month-events">';
+
+				( byDate[ dateStr ] || [] ).forEach( function ( entry ) {
+					var ev = entry.event;
+					var time = pad( entry.start.getHours() ) + ':' + pad( entry.start.getMinutes() );
+					var statusClass = ev.isBlocked ? 'blocked' : ev.status;
+
+					if ( ev.isBlocked ) {
+						html += '<span class="mp-agenda-month-event mp-agenda-event-' + statusClass + '">' +
+							'<span class="mp-agenda-month-event-time">' + time + '</span> ' +
+							escapeHtml( ev.reason || 'Indisponible' ) + '</span>';
+						return;
+					}
+
+					var tech = techById[ parseInt( ev.technician_id, 10 ) ] || '';
+					html += '<button type="button" class="mp-agenda-month-event mp-agenda-event-' + statusClass + '" data-appt-id="' + ev.id + '">' +
+						'<span class="mp-agenda-month-event-time">' + time + '</span> ' +
+						escapeHtml( ev.client_name || '' ) +
+						( tech ? ' <span class="mp-agenda-month-event-tech">· ' + escapeHtml( tech ) + '</span>' : '' ) +
+						'</button>';
+				} );
+
+				html += '</div></div>';
+				cursor.setDate( cursor.getDate() + 1 );
+			}
+
+			html += '</div></div>';
+			this.el.innerHTML = html;
+
+			// Clic sur un RDV → modal d'édition.
+			this.el.querySelectorAll( '.mp-agenda-month-event[data-appt-id]' ).forEach( function ( btn ) {
+				btn.addEventListener( 'click', function ( e ) {
+					e.stopPropagation();
+					var id = parseInt( btn.dataset.apptId, 10 );
+					var appt = appointments.filter( function ( a ) {
+						return parseInt( a.id, 10 ) === id;
+					} )[ 0 ];
+					if ( appt ) {
+						Modal.openForEdit( appt );
+					}
+				} );
+			} );
+
+			// Clic sur un jour → bascule en vue Jour sur ce jour.
+			this.el.querySelectorAll( '.mp-agenda-month-cell' ).forEach( function ( cell ) {
+				cell.addEventListener( 'click', function () {
+					Calendar.currentDate = new Date( cell.dataset.date + 'T00:00:00' );
+					Calendar.view = 'day';
+					document.querySelectorAll( '.mp-agenda-view-btn' ).forEach( function ( b ) {
+						b.classList.toggle( 'is-active', 'day' === b.dataset.view );
+					} );
+					Calendar.render();
 				} );
 			} );
 		},

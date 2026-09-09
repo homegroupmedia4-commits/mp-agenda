@@ -4,7 +4,7 @@ Tags: rendez-vous, planning, calendrier, google agenda, réservation
 Requires at least: 6.4
 Tested up to: 6.6
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -14,7 +14,7 @@ Système de prise de rendez-vous simplifié pour une petite entreprise de rénov
 
 MP Agenda est un plugin de prise de rendez-vous épuré, pensé pour une petite équipe de terrain (par défaut deux commerciaux, Alexandre et Kamal). Il propose :
 
-* Un planning visuel en vue jour/semaine dans l'administration WordPress.
+* Un planning visuel en vue jour/semaine/mois dans l'administration WordPress.
 * Une gestion complète des rendez-vous (création, modification, annulation, statuts).
 * Une fiche par commercial avec horaires de travail personnalisés.
 * Un formulaire de réservation client en 6 étapes via le shortcode `[mp_agenda_booking]`.
@@ -42,6 +42,12 @@ Non, la synchronisation Google Agenda est optionnelle. Le plugin fonctionne plei
 Oui, la page "Commerciaux" permet d'ajouter, modifier ou supprimer autant de commerciaux que nécessaire.
 
 == Changelog ==
+
+= 1.5.0 =
+* Ajout : vue "Mois" dans le planning admin — calendrier mensuel classique (grille 7 colonnes) affichant, pour chaque jour, la liste des RDV (heure, nom du client, commercial) colorés par statut ainsi que les créneaux bloqués en gris. Navigation par mois, clic sur un jour pour basculer en vue Jour, clic sur un RDV pour ouvrir la modal d'édition. Le filtre par commercial s'applique aussi en vue Mois.
+* Modification : le filtre par commercial du planning devient un menu déroulant ("Tous les commerciaux" + liste des commerciaux) à la place des boutons, avec le même comportement de filtrage.
+* Modification : nettoyage de la page Réglages > Google API — l'étape 5 renvoie désormais à la documentation pour l'URI de redirection, et l'encart d'avertissement sur le mode "Testing" a été retiré.
+* Les vues Jour et Semaine sont inchangées.
 
 = 1.4.0 =
 * Ajout : choix du mode de synchronisation Google Agenda dans Réglages > Google API — Individuel (chaque commercial son propre agenda, comportement historique) ou Partagé (tous les commerciaux utilisent un seul agenda Google centralisé).

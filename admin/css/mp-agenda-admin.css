@@ -339,6 +339,24 @@
 	border-color: var(--mp-primary);
 }
 
+/* Filtre commercial (dropdown) */
+.mp-agenda-filter-select {
+	height: 32px;
+	border: 1px solid var(--mp-border);
+	border-radius: 8px;
+	padding: 0 28px 0 10px;
+	font-size: 13px;
+	line-height: 1;
+	background-color: #fff;
+	color: var(--mp-text);
+	cursor: pointer;
+	max-width: 220px;
+}
+.mp-agenda-filter-select:focus {
+	border-color: var(--mp-primary);
+	outline: none;
+}
+
 .mp-agenda-legend {
 	display: flex;
 	gap: 16px;
@@ -472,6 +490,114 @@
 	background: repeating-linear-gradient(45deg, #cbd5e1, #cbd5e1 5px, #e2e8f0 5px, #e2e8f0 10px);
 	color: var(--mp-text-secondary);
 	cursor: default;
+}
+
+/* Vue mois */
+.mp-agenda-month {
+	min-width: 700px;
+}
+.mp-agenda-month-weekdays {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	border-bottom: 2px solid var(--mp-border);
+}
+.mp-agenda-month-weekday {
+	padding: 10px 8px;
+	text-align: center;
+	font-weight: 600;
+	font-size: 12px;
+	color: var(--mp-text-secondary);
+}
+.mp-agenda-month-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+}
+.mp-agenda-month-cell {
+	min-height: 120px;
+	padding: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	border-left: 1px solid var(--mp-border);
+	border-bottom: 1px solid var(--mp-border);
+	cursor: pointer;
+	transition: background 0.1s;
+}
+.mp-agenda-month-cell:nth-child(7n + 1) {
+	border-left: none;
+}
+.mp-agenda-month-cell:hover {
+	background: #eff6ff;
+}
+.mp-agenda-month-cell.is-outside {
+	background: var(--mp-bg);
+	color: var(--mp-text-secondary);
+}
+.mp-agenda-month-cell.is-outside .mp-agenda-month-daynum {
+	opacity: 0.5;
+}
+.mp-agenda-month-daynum {
+	align-self: flex-start;
+	width: 22px;
+	height: 22px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	font-size: 12px;
+	font-weight: 600;
+}
+.mp-agenda-month-cell.is-today .mp-agenda-month-daynum {
+	background: var(--mp-primary);
+	color: #fff;
+}
+.mp-agenda-month-events {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	overflow: hidden;
+}
+.mp-agenda-month-event {
+	display: block;
+	width: 100%;
+	text-align: left;
+	border: none;
+	border-radius: 6px;
+	padding: 2px 6px;
+	font-size: 11px;
+	line-height: 1.5;
+	font-family: inherit;
+	color: #fff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	cursor: pointer;
+}
+.mp-agenda-month-event[disabled],
+span.mp-agenda-month-event {
+	cursor: default;
+}
+.mp-agenda-month-event-time {
+	font-weight: 700;
+}
+.mp-agenda-month-event-tech {
+	opacity: 0.85;
+}
+
+@media (max-width: 1100px) {
+	.mp-agenda-month-cell {
+		min-height: 88px;
+		padding: 4px;
+	}
+	.mp-agenda-month-event {
+		font-size: 10px;
+		padding: 2px 4px;
+	}
+	.mp-agenda-month-daynum {
+		width: 20px;
+		height: 20px;
+		font-size: 11px;
+	}
 }
 
 /* Modal */
