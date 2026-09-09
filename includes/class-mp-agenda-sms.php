@@ -221,21 +221,33 @@ class MP_Agenda_SMS {
 			return false;
 		}
 
+		$sender = isset( $s['sender'] ) ? trim( (string) $s['sender'] ) : '';
+
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-		error_log( sprintf( '[MP Agenda SMS] Tentative d\'envoi vers %s (service=%s, sender=%s).', $to, $s['service_name'], $s['sender'] ) );
+		error_log( sprintf(
+			'[MP Agenda SMS] Tentative d\'envoi vers %s (service=%s, sender=%s).',
+			$to,
+			$s['service_name'],
+			'' !== $sender ? $sender : '(par défaut OVH)'
+		) );
 
 		$url = self::API_BASE . '/sms/' . rawurlencode( $s['service_name'] ) . '/jobs';
 
-		$body = wp_json_encode(
-			array(
-				'charset'      => 'UTF-8',
-				'receivers'    => array( $to ),
-				'message'      => $message,
-				'noStopClause' => true,
-				'priority'     => 'high',
-				'sender'       => $s['sender'],
-			)
+		$payload = array(
+			'charset'      => 'UTF-8',
+			'receivers'    => array( $to ),
+			'message'      => $message,
+			'noStopClause' => true,
+			'priority'     => 'high',
 		);
+
+		// Expéditeur personnalisé uniquement s'il est renseigné : sinon on n'envoie
+		// PAS la clé "sender" et OVH utilise son numéro court par défaut.
+		if ( '' !== $sender ) {
+			$payload['sender'] = $sender;
+		}
+
+		$body = wp_json_encode( $payload );
 
 		$timestamp = $this->get_ovh_time();
 		$signature = $this->sign( $s['app_secret'], $s['consumer_key'], 'POST', $url, $body, $timestamp );
