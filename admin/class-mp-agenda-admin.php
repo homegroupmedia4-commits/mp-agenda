@@ -36,6 +36,9 @@ class MP_Agenda_Admin {
 		add_action( 'admin_post_mp_agenda_google_disconnect_shared', array( $this, 'handle_google_disconnect_shared' ) );
 		add_action( 'admin_post_mp_agenda_export_csv', array( $this, 'handle_export_csv' ) );
 		add_action( 'admin_post_mp_agenda_send_test_reminder', array( $this, 'handle_send_test_reminder' ) );
+		add_action( 'admin_post_mp_agenda_save_sms_settings', array( $this, 'handle_save_sms_settings' ) );
+		add_action( 'admin_post_mp_agenda_send_test_sms', array( $this, 'handle_send_test_sms' ) );
+		add_action( 'wp_ajax_mp_agenda_sms_credits', array( $this, 'handle_sms_credits_ajax' ) );
 	}
 
 	/**
@@ -497,6 +500,85 @@ class MP_Agenda_Admin {
 			)
 		);
 		exit;
+	}
+
+	/**
+	 * Enregistre les réglages SMS (option mp_agenda_sms_settings).
+	 *
+	 * @return void
+	 */
+	public function handle_save_sms_settings() {
+		$this->verify_request( 'mp_agenda_save_sms_settings' );
+
+		$sender = isset( $_POST['sms_sender'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_sender'] ) ) : 'MP RENOV';
+		// OVH limite l'expéditeur à 11 caractères alphanumériques.
+		$sender = substr( $sender, 0, 11 );
+
+		$settings = array(
+			'enabled'      => isset( $_POST['sms_enabled'] ) ? 1 : 0,
+			'service_name' => isset( $_POST['sms_service_name'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_service_name'] ) ) : '',
+			'app_key'      => isset( $_POST['sms_app_key'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_app_key'] ) ) : '',
+			'app_secret'   => isset( $_POST['sms_app_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_app_secret'] ) ) : '',
+			'consumer_key' => isset( $_POST['sms_consumer_key'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_consumer_key'] ) ) : '',
+			'sender'       => $sender,
+			'reminder_j3'  => isset( $_POST['sms_reminder_j3'] ) ? 1 : 0,
+			'reminder_j1'  => isset( $_POST['sms_reminder_j1'] ) ? 1 : 0,
+			'message_j3'   => isset( $_POST['sms_message_j3'] ) ? sanitize_textarea_field( wp_unslash( $_POST['sms_message_j3'] ) ) : '',
+			'message_j1'   => isset( $_POST['sms_message_j1'] ) ? sanitize_textarea_field( wp_unslash( $_POST['sms_message_j1'] ) ) : '',
+		);
+
+		update_option( 'mp_agenda_sms_settings', $settings );
+
+		wp_safe_redirect( add_query_arg( array( 'page' => 'mp-agenda-settings', 'tab' => 'sms', 'mp_agenda_notice' => 'saved' ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
+	/**
+	 * Envoie un SMS de test au numéro saisi dans l'onglet SMS des réglages.
+	 *
+	 * @return void
+	 */
+	public function handle_send_test_sms() {
+		$this->verify_request( 'mp_agenda_send_test_sms' );
+
+		$phone = isset( $_POST['sms_test_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['sms_test_phone'] ) ) : '';
+
+		$sms  = new MP_Agenda_SMS();
+		$sent = ( '' !== $phone ) ? $sms->send_test_sms( $phone ) : false;
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'             => 'mp-agenda-settings',
+					'tab'              => 'sms',
+					'mp_agenda_notice' => $sent ? 'test_sms_sent' : 'test_sms_failed',
+				),
+				admin_url( 'admin.php' )
+			)
+		);
+		exit;
+	}
+
+	/**
+	 * Endpoint AJAX (admin) : retourne le solde de crédits SMS OVH.
+	 *
+	 * @return void
+	 */
+	public function handle_sms_credits_ajax() {
+		check_ajax_referer( 'mp_agenda_ajax', 'nonce' );
+
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Action non autorisée.', 'mp-agenda' ) ), 403 );
+		}
+
+		$sms     = new MP_Agenda_SMS();
+		$credits = $sms->get_sms_credits();
+
+		if ( null === $credits ) {
+			wp_send_json_error( array( 'message' => __( 'Solde indisponible (clés API manquantes ou API OVH injoignable).', 'mp-agenda' ) ) );
+		}
+
+		wp_send_json_success( array( 'credits' => $credits ) );
 	}
 
 	/**

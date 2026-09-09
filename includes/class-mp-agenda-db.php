@@ -418,6 +418,64 @@ class MP_Agenda_DB {
 	}
 
 	/**
+	 * Récupère les rendez-vous confirmés dont le début tombe dans une plage donnée,
+	 * sans filtre sur les flags de rappel (le tri par flag se fait côté appelant).
+	 *
+	 * Utilisé par les rappels SMS J-3 / J-1 (MP_Agenda_SMS). Retourne un tableau
+	 * vide en cas d'erreur SQL plutôt que de faire échouer le cron.
+	 *
+	 * @param string $from Date/heure de début de la fenêtre (Y-m-d H:i:s).
+	 * @param string $to   Date/heure de fin de la fenêtre (Y-m-d H:i:s).
+	 * @return array
+	 */
+	public static function get_confirmed_appointments_between( $from, $to ) {
+		global $wpdb;
+		$table    = self::table_appointments();
+		$tech     = self::table_technicians();
+		$services = self::table_services();
+
+		$sql = $wpdb->prepare(
+			"SELECT a.*, t.name AS technician_name, s.name AS service_name FROM {$table} a
+			LEFT JOIN {$tech} t ON t.id = a.technician_id
+			LEFT JOIN {$services} s ON s.id = a.service_id
+			WHERE a.status = 'confirmed'
+			AND a.start_datetime >= %s
+			AND a.start_datetime <= %s
+			ORDER BY a.start_datetime ASC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$from,
+			$to
+		);
+
+		$results = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		if ( '' !== $wpdb->last_error ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( '[MP Agenda] get_confirmed_appointments_between : ' . $wpdb->last_error );
+			return array();
+		}
+
+		return is_array( $results ) ? $results : array();
+	}
+
+	/**
+	 * Marque un rappel SMS comme envoyé pour un rendez-vous.
+	 *
+	 * @param int    $id    ID du rendez-vous.
+	 * @param string $which 'j3' ou 'j1'.
+	 * @return void
+	 */
+	public static function mark_sms_reminder_sent( $id, $which ) {
+		global $wpdb;
+
+		$column = 'j3' === $which ? 'sms_reminder_j3_sent' : ( 'j1' === $which ? 'sms_reminder_j1_sent' : '' );
+		if ( '' === $column ) {
+			return;
+		}
+
+		$wpdb->update( self::table_appointments(), array( $column => 1 ), array( 'id' => absint( $id ) ) ); // phpcs:ignore WordPress.DB.SlowDBQuery.SlowDBQuery
+	}
+
+	/**
 	 * Crée ou met à jour un rendez-vous.
 	 *
 	 * @param array    $data Données du rendez-vous.

@@ -20,6 +20,7 @@ MP Agenda est un plugin de prise de rendez-vous épuré, pensé pour une petite 
 * Un formulaire de réservation client en 6 étapes via le shortcode `[mp_agenda_booking]`.
 * Une synchronisation bidirectionnelle avec Google Agenda (OAuth 2.0).
 * Des notifications email automatiques (client et commercial).
+* Des rappels automatiques par email (J-1) et par SMS via OVH (J-3 et J-1).
 * Des boutons "Ajouter au calendrier" (Google, Outlook, Apple) pour le client, après réservation et dans l'email de confirmation.
 * Une page publique "Gérer mon rendez-vous" (`[mp_agenda_manage]`) permettant au client de reprogrammer ou d'annuler son rendez-vous via un lien sécurisé.
 * Un export CSV des rendez-vous.
@@ -51,6 +52,7 @@ Oui, la page "Commerciaux" permet d'ajouter, modifier ou supprimer autant de com
 * Ajout : lien "Modifier mon rendez-vous" dans l'email de confirmation client (à côté du lien d'annulation existant) et mention "Le client peut modifier ou annuler ce rendez-vous" dans l'email commercial.
 * Ajout : emails de suivi (client + commercial) lors d'une modification ou d'une annulation faite depuis la page publique.
 * Ajout : rappel automatique par email au client ~24 h avant le rendez-vous (nouveau template reminder-client.php avec les boutons calendrier et les liens modifier/annuler). Cron horaire mp_agenda_send_reminders_cron avec fenêtre glissante de 2 h (résiste à un cron WP en retard), flag reminder_sent en base pour ne jamais envoyer deux rappels. Nouveau réglage "Envoyer un email de rappel 24 heures avant le rendez-vous" (coché par défaut) dans Réglages > Notifications, avec bouton "Envoyer un rappel test".
+* Ajout : rappels SMS via l'API OVH SMS (nouvel onglet Réglages > SMS : activation, service + clés API OVH, nom d'expéditeur, solde de crédits, SMS de test, messages personnalisables). Rappel J-3 (fenêtre +71 h → +73 h) et rappel J-1 (fenêtre +23 h → +25 h) portés par le même cron horaire, avec flags sms_reminder_j3_sent / sms_reminder_j1_sent en base. Placeholders : {client_name} {date} {heure} {service} {commercial} {company_name} {manage_url}. Désactivé par défaut ; aucun SMS n'est envoyé tant que la case n'est pas cochée et les clés API renseignées.
 * Le formulaire de réservation, les emails existants, le planning et la synchronisation Google restent inchangés.
 
 = 1.5.0 =

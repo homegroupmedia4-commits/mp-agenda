@@ -16,6 +16,7 @@ $mp_gdpr_retention           = get_option( 'mp_agenda_gdpr_retention_months', 24
 $mp_google_client_id         = get_option( 'mp_agenda_google_client_id', '' );
 $mp_google_secret            = get_option( 'mp_agenda_google_client_secret', '' );
 $mp_google_sync_mode         = get_option( 'mp_agenda_google_sync_mode', 'individual' );
+$mp_sms                      = MP_Agenda_SMS::get_settings();
 $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'general';
 ?>
 <div class="wrap mp-agenda-wrap">
@@ -32,6 +33,14 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 		<div class="notice notice-error is-dismissible mp-agenda-notice">
 			<p><?php esc_html_e( 'Impossible d\'envoyer l\'email de rappel test (adresse email invalide).', 'mp-agenda' ); ?></p>
 		</div>
+	<?php elseif ( 'test_sms_sent' === $mp_notice ) : ?>
+		<div class="notice notice-success is-dismissible mp-agenda-notice">
+			<p><?php esc_html_e( 'SMS de test transmis à OVH. Vérifiez la réception et les logs si besoin.', 'mp-agenda' ); ?></p>
+		</div>
+	<?php elseif ( 'test_sms_failed' === $mp_notice ) : ?>
+		<div class="notice notice-error is-dismissible mp-agenda-notice">
+			<p><?php esc_html_e( 'Échec de l\'envoi du SMS de test (numéro manquant, rappels SMS désactivés ou clés API OVH incomplètes). Voir error_log.', 'mp-agenda' ); ?></p>
+		</div>
 	<?php elseif ( '' !== $mp_notice ) : ?>
 		<div class="notice notice-success is-dismissible mp-agenda-notice">
 			<p><?php esc_html_e( 'Réglages enregistrés.', 'mp-agenda' ); ?></p>
@@ -42,6 +51,7 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 		<a href="?page=mp-agenda-settings&tab=general" class="nav-tab <?php echo 'general' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Général', 'mp-agenda' ); ?></a>
 		<a href="?page=mp-agenda-settings&tab=google" class="nav-tab <?php echo 'google' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Google API', 'mp-agenda' ); ?></a>
 		<a href="?page=mp-agenda-settings&tab=notifications" class="nav-tab <?php echo 'notifications' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'Notifications', 'mp-agenda' ); ?></a>
+		<a href="?page=mp-agenda-settings&tab=sms" class="nav-tab <?php echo 'sms' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'SMS', 'mp-agenda' ); ?></a>
 		<a href="?page=mp-agenda-settings&tab=gdpr" class="nav-tab <?php echo 'gdpr' === $mp_active_tab ? 'nav-tab-active' : ''; ?>"><?php esc_html_e( 'RGPD', 'mp-agenda' ); ?></a>
 	</h2>
 
@@ -187,6 +197,124 @@ $mp_active_tab               = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'
 			</div>
 			<p class="description"><?php esc_html_e( 'Le rappel test est envoyé à l\'adresse d\'envoi des notifications (ou à l\'email administrateur du site).', 'mp-agenda' ); ?></p>
 		</form>
+
+	<?php elseif ( 'sms' === $mp_active_tab ) : ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
+			<?php wp_nonce_field( 'mp_agenda_save_sms_settings' ); ?>
+			<input type="hidden" name="action" value="mp_agenda_save_sms_settings" />
+
+			<div class="mp-agenda-field">
+				<label class="mp-agenda-toggle">
+					<input type="checkbox" name="sms_enabled" value="1" <?php checked( ! empty( $mp_sms['enabled'] ) ); ?> />
+					<span><?php esc_html_e( 'Activer les rappels SMS (via OVH)', 'mp-agenda' ); ?></span>
+				</label>
+				<p class="description"><?php esc_html_e( 'Les SMS ne sont envoyés que si cette case est cochée ET que le service + les 3 clés API OVH sont renseignés.', 'mp-agenda' ); ?></p>
+			</div>
+
+			<hr class="mp-agenda-separator" />
+
+			<div class="mp-agenda-field">
+				<label for="sms_service_name"><?php esc_html_e( 'Service OVH SMS', 'mp-agenda' ); ?></label>
+				<input type="text" id="sms_service_name" name="sms_service_name" value="<?php echo esc_attr( $mp_sms['service_name'] ); ?>" />
+			</div>
+
+			<div class="mp-agenda-field">
+				<label for="sms_app_key"><?php esc_html_e( 'Application Key', 'mp-agenda' ); ?></label>
+				<input type="text" id="sms_app_key" name="sms_app_key" value="<?php echo esc_attr( $mp_sms['app_key'] ); ?>" autocomplete="off" />
+			</div>
+
+			<div class="mp-agenda-field">
+				<label for="sms_app_secret"><?php esc_html_e( 'Application Secret', 'mp-agenda' ); ?></label>
+				<input type="password" id="sms_app_secret" name="sms_app_secret" value="<?php echo esc_attr( $mp_sms['app_secret'] ); ?>" autocomplete="off" />
+			</div>
+
+			<div class="mp-agenda-field">
+				<label for="sms_consumer_key"><?php esc_html_e( 'Consumer Key', 'mp-agenda' ); ?></label>
+				<input type="text" id="sms_consumer_key" name="sms_consumer_key" value="<?php echo esc_attr( $mp_sms['consumer_key'] ); ?>" autocomplete="off" />
+			</div>
+
+			<div class="mp-agenda-field">
+				<label for="sms_sender"><?php esc_html_e( 'Nom de l\'expéditeur (11 caractères max)', 'mp-agenda' ); ?></label>
+				<input type="text" id="sms_sender" name="sms_sender" maxlength="11" value="<?php echo esc_attr( $mp_sms['sender'] ); ?>" />
+			</div>
+
+			<div class="mp-agenda-field">
+				<label><?php esc_html_e( 'Crédits SMS restants', 'mp-agenda' ); ?></label>
+				<p><strong id="mp-agenda-sms-credits"><?php esc_html_e( 'Chargement…', 'mp-agenda' ); ?></strong></p>
+			</div>
+
+			<hr class="mp-agenda-separator" />
+
+			<div class="mp-agenda-field">
+				<label class="mp-agenda-toggle">
+					<input type="checkbox" name="sms_reminder_j3" value="1" <?php checked( ! empty( $mp_sms['reminder_j3'] ) ); ?> />
+					<span><?php esc_html_e( 'Envoyer un SMS de rappel 3 jours avant', 'mp-agenda' ); ?></span>
+				</label>
+			</div>
+
+			<div class="mp-agenda-field">
+				<label for="sms_message_j3"><?php esc_html_e( 'Message J-3', 'mp-agenda' ); ?></label>
+				<textarea id="sms_message_j3" name="sms_message_j3" rows="3"><?php echo esc_textarea( $mp_sms['message_j3'] ); ?></textarea>
+			</div>
+
+			<div class="mp-agenda-field">
+				<label class="mp-agenda-toggle">
+					<input type="checkbox" name="sms_reminder_j1" value="1" <?php checked( ! empty( $mp_sms['reminder_j1'] ) ); ?> />
+					<span><?php esc_html_e( 'Envoyer un SMS de rappel 24 heures avant', 'mp-agenda' ); ?></span>
+				</label>
+			</div>
+
+			<div class="mp-agenda-field">
+				<label for="sms_message_j1"><?php esc_html_e( 'Message J-1', 'mp-agenda' ); ?></label>
+				<textarea id="sms_message_j1" name="sms_message_j1" rows="3"><?php echo esc_textarea( $mp_sms['message_j1'] ); ?></textarea>
+			</div>
+
+			<p class="description">
+				<?php esc_html_e( 'Variables disponibles :', 'mp-agenda' ); ?>
+				<code>{client_name}</code> <code>{date}</code> <code>{heure}</code> <code>{service}</code> <code>{commercial}</code> <code>{company_name}</code> <code>{manage_url}</code>
+			</p>
+
+			<div class="mp-agenda-form-actions">
+				<button type="submit" class="button button-primary"><?php esc_html_e( 'Enregistrer', 'mp-agenda' ); ?></button>
+			</div>
+		</form>
+
+		<hr class="mp-agenda-separator" />
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">
+			<?php wp_nonce_field( 'mp_agenda_send_test_sms' ); ?>
+			<input type="hidden" name="action" value="mp_agenda_send_test_sms" />
+			<div class="mp-agenda-field">
+				<label for="sms_test_phone"><?php esc_html_e( 'Numéro pour le SMS de test', 'mp-agenda' ); ?></label>
+				<input type="text" id="sms_test_phone" name="sms_test_phone" placeholder="06 12 34 56 78" />
+			</div>
+			<div class="mp-agenda-form-actions">
+				<button type="submit" class="button"><?php esc_html_e( 'Envoyer un SMS test', 'mp-agenda' ); ?></button>
+			</div>
+			<p class="description"><?php esc_html_e( 'Enregistrez d\'abord vos clés API, puis testez. Chaque envoi est journalisé dans error_log.', 'mp-agenda' ); ?></p>
+		</form>
+
+		<script>
+			document.addEventListener( 'DOMContentLoaded', function () {
+				var el = document.getElementById( 'mp-agenda-sms-credits' );
+				if ( ! el || typeof window.mpAgendaAdmin === 'undefined' ) {
+					return;
+				}
+				var body = new FormData();
+				body.append( 'action', 'mp_agenda_sms_credits' );
+				body.append( 'nonce', window.mpAgendaAdmin.nonce );
+				fetch( window.mpAgendaAdmin.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body } )
+					.then( function ( r ) { return r.json(); } )
+					.then( function ( json ) {
+						if ( json && json.success && json.data && typeof json.data.credits !== 'undefined' ) {
+							el.textContent = json.data.credits;
+						} else {
+							el.textContent = ( json && json.data && json.data.message ) ? json.data.message : '—';
+						}
+					} )
+					.catch( function () { el.textContent = '—'; } );
+			} );
+		</script>
 
 	<?php elseif ( 'gdpr' === $mp_active_tab ) : ?>
 		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="mp-agenda-form">

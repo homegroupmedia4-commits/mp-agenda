@@ -60,6 +60,13 @@ class MP_Agenda {
 	protected $notifications;
 
 	/**
+	 * Instance de l'envoi de SMS (OVH).
+	 *
+	 * @var MP_Agenda_SMS
+	 */
+	protected $sms;
+
+	/**
 	 * Constructeur : instancie les sous-modules du plugin.
 	 */
 	public function __construct() {
@@ -69,6 +76,7 @@ class MP_Agenda {
 		$this->ajax          = new MP_Agenda_Ajax( $this->rest_api );
 		$this->google_sync   = new MP_Agenda_Google_Sync();
 		$this->notifications = new MP_Agenda_Notifications();
+		$this->sms           = new MP_Agenda_SMS();
 
 		new MP_Agenda_Shortcode();
 	}
@@ -85,6 +93,9 @@ class MP_Agenda {
 
 		// Cron horaire : rappel email ~24 h avant le rendez-vous.
 		add_action( 'mp_agenda_send_reminders_cron', array( $this->notifications, 'send_due_reminders' ) );
+
+		// Même cron horaire : rappels SMS J-3 et J-1 (OVH).
+		add_action( 'mp_agenda_send_reminders_cron', array( $this->sms, 'send_due_sms_reminders' ) );
 
 		$this->admin->init();
 		$this->public_area->init();

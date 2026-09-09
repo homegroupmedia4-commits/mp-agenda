@@ -116,6 +116,8 @@ class MP_Agenda_Activator {
 			source VARCHAR(20) NOT NULL DEFAULT 'admin',
 			cancel_token VARCHAR(64) DEFAULT NULL,
 			reminder_sent TINYINT(1) NOT NULL DEFAULT 0,
+			sms_reminder_j3_sent TINYINT(1) NOT NULL DEFAULT 0,
+			sms_reminder_j1_sent TINYINT(1) NOT NULL DEFAULT 0,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			PRIMARY KEY  (id),
@@ -178,6 +180,7 @@ class MP_Agenda_Activator {
 		self::add_showroom_id_column();
 		self::add_service_id_column();
 		self::add_reminder_sent_column();
+		self::add_sms_reminder_columns();
 	}
 
 	/**
@@ -194,6 +197,27 @@ class MP_Agenda_Activator {
 
 		if ( empty( $exists ) ) {
 			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN reminder_sent TINYINT(1) NOT NULL DEFAULT 0 AFTER cancel_token" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		}
+	}
+
+	/**
+	 * Ajoute les colonnes sms_reminder_j3_sent / sms_reminder_j1_sent à la table des
+	 * rendez-vous si elles n'existent pas déjà (flags "rappel SMS J-3 / J-1 envoyé",
+	 * utilisés par MP_Agenda_SMS::send_due_sms_reminders()).
+	 *
+	 * @return void
+	 */
+	private static function add_sms_reminder_columns() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'mp_agenda_appointments';
+
+		foreach ( array( 'sms_reminder_j3_sent', 'sms_reminder_j1_sent' ) as $column ) {
+			$exists = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM ' . $table . ' LIKE %s', $column ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+			if ( empty( $exists ) ) {
+				$wpdb->query( "ALTER TABLE {$table} ADD COLUMN {$column} TINYINT(1) NOT NULL DEFAULT 0" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			}
 		}
 	}
 

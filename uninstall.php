@@ -50,6 +50,7 @@ $options = array(
 	'mp_agenda_db_version',
 	'mp_agenda_manage_page_id',
 	'mp_agenda_settings',
+	'mp_agenda_sms_settings',
 	'mp_agenda_intervention_types',
 	'mp_agenda_google_client_id',
 	'mp_agenda_google_client_secret',
