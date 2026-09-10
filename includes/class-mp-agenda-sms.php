@@ -326,7 +326,12 @@ class MP_Agenda_SMS {
 		} elseif ( $sender_for_response ) {
 			// Aucun expéditeur validé : numéro court virtuel OVH.
 			$payload['senderForResponse'] = true;
-			// OVH impose la clause STOP sur les numéros courts virtuels.
+		}
+
+		if ( $sender_for_response ) {
+			// OVH rejette « cannot send contact information with shortcode »
+			// lorsque noStopClause est true avec un numéro court virtuel :
+			// la clause STOP est obligatoire dans ce cas.
 			$payload['noStopClause'] = false;
 		}
 
