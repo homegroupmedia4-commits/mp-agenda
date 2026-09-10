@@ -299,6 +299,70 @@ class MP_Agenda_SMS {
 	}
 
 	/**
+	 * L'envoi va-t-il passer par un numéro court virtuel OVH (senderForResponse)
+	 * plutôt que par un expéditeur nommé ? C'est le cas lorsqu'aucun expéditeur
+	 * n'est configuré ET qu'aucun expéditeur validé n'est disponible sur le
+	 * compte. Utilisé pour adapter le message en amont (OVH refuse les URLs /
+	 * téléphones / e-mails avec un numéro court).
+	 *
+	 * Remarque : ne couvre pas la nouvelle tentative déclenchée après le refus
+	 * d'un expéditeur nommé — ce cas est traité dans post_job() via
+	 * strip_contact_info().
+	 *
+	 * @return bool
+	 */
+	public function will_use_sender_for_response() {
+		$s      = self::get_settings();
+		$sender = isset( $s['sender'] ) ? trim( (string) $s['sender'] ) : '';
+
+		if ( '' !== $sender ) {
+			return false;
+		}
+
+		$available = $this->get_available_senders();
+
+		return ! ( is_array( $available ) && ! empty( $available ) );
+	}
+
+	/**
+	 * Retire d'un message les « coordonnées de contact » (URLs, adresses e-mail,
+	 * numéros de téléphone) qu'OVH refuse lorsqu'on envoie via un numéro court
+	 * virtuel (senderForResponse) — erreur HTTP 400 « cannot send contact
+	 * information with shortcode ».
+	 *
+	 * @param string $message Message d'origine.
+	 * @return string Message nettoyé.
+	 */
+	private function strip_contact_info( $message ) {
+		$message = (string) $message;
+
+		// URLs (http://, https://, www.).
+		$message = preg_replace( '#\b(?:https?://|www\.)\S+#i', '', $message );
+
+		// Adresses e-mail.
+		$message = preg_replace( '/\b[^\s@]+@[^\s@]+\.[^\s@]+/', '', $message );
+
+		// Numéros de téléphone : suites d'au moins 9 chiffres, éventuellement
+		// séparées par des espaces, points, tirets ou barres (+ initial toléré).
+		// Les dates, heures et prix (moins de chiffres) sont préservés.
+		$message = preg_replace_callback(
+			'/\+?\d[\d\s.\-\/]{6,}\d/',
+			static function ( $matches ) {
+				$digits = preg_replace( '/\D/', '', $matches[0] );
+				return strlen( $digits ) >= 9 ? '' : $matches[0];
+			},
+			$message
+		);
+
+		// Nettoyage des espaces et de la ponctuation orpheline laissés derrière.
+		$message = preg_replace( '/[ \t]{2,}/', ' ', $message );
+		$message = preg_replace( '/\s+([.,;:!?])/', '$1', $message );
+		$message = preg_replace( '/[\s:\x{2013}\x{2014}\-]+$/u', '', trim( $message ) );
+
+		return trim( $message );
+	}
+
+	/**
 	 * Envoie effectivement un job SMS à OVH (POST /sms/{service}/jobs) et analyse
 	 * la réponse. Renseigne $this->last_error et $this->last_http_code.
 	 *
@@ -333,12 +397,21 @@ class MP_Agenda_SMS {
 			// lorsque noStopClause est true avec un numéro court virtuel :
 			// la clause STOP est obligatoire dans ce cas.
 			$payload['noStopClause'] = false;
+
+			// Sur un numéro court virtuel, OVH refuse aussi les « coordonnées de
+			// contact » (URLs, e-mails, téléphones) dans le message : on les
+			// retire ici en dernier recours — notamment pour la nouvelle
+			// tentative déclenchée après le refus d'un expéditeur nommé.
+			$payload['message'] = $this->strip_contact_info( $payload['message'] );
 		}
 
 		$body = wp_json_encode( $payload );
 
 		$timestamp = $this->get_ovh_time();
 		$signature = $this->sign( $s['app_secret'], $s['consumer_key'], 'POST', $url, $body, $timestamp );
+
+		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+		error_log( '[MP Agenda SMS] Payload envoyé : ' . $body );
 
 		$response = wp_remote_post(
 			$url,
@@ -592,6 +665,9 @@ class MP_Agenda_SMS {
 	private function process_sms_window( $from, $to, $which, $template ) {
 		$column = 'j3' === $which ? 'sms_reminder_j3_sent' : 'sms_reminder_j1_sent';
 
+		// Envoi via numéro court OVH : le modèle ne doit pas contenir d'URL.
+		$no_contact_info = $this->will_use_sender_for_response();
+
 		foreach ( MP_Agenda_DB::get_confirmed_appointments_between( $from, $to ) as $appointment ) {
 			if ( ! empty( $appointment[ $column ] ) ) {
 				continue;
@@ -604,7 +680,7 @@ class MP_Agenda_SMS {
 				continue;
 			}
 
-			$sent = $this->send_sms( $appointment['client_phone'], $this->render_message( $template, $appointment ) );
+			$sent = $this->send_sms( $appointment['client_phone'], $this->render_message( $template, $appointment, $no_contact_info ) );
 
 			// On marque toujours le rappel comme traité pour ne jamais en renvoyer un
 			// deuxième au passage suivant du cron.
@@ -627,11 +703,14 @@ class MP_Agenda_SMS {
 	 * Placeholders : {client_name} {date} {heure} {service} {commercial}
 	 * {company_name} {manage_url}
 	 *
-	 * @param string $template    Modèle.
-	 * @param array  $appointment Rendez-vous (avec technician_name / service_name du JOIN).
+	 * @param string $template          Modèle.
+	 * @param array  $appointment       Rendez-vous (avec technician_name / service_name du JOIN).
+	 * @param bool   $no_contact_info   True pour un envoi via numéro court OVH : {manage_url}
+	 *                                  est alors remplacé par le nom de l'entreprise (OVH
+	 *                                  refuse les URLs avec les numéros courts).
 	 * @return string
 	 */
-	public function render_message( $template, $appointment ) {
+	public function render_message( $template, $appointment, $no_contact_info = false ) {
 		$settings = get_option( 'mp_agenda_settings', array() );
 		$date     = new DateTime( $appointment['start_datetime'] );
 
@@ -653,14 +732,18 @@ class MP_Agenda_SMS {
 		$date_fr = (int) $date->format( 'j' ) . ' ' . $months[ (int) $date->format( 'n' ) ] . ' ' . $date->format( 'Y' );
 		$service = ! empty( $appointment['service_name'] ) ? $appointment['service_name'] : ( $appointment['intervention_type'] ?? '' );
 
+		$company = $settings['company_name'] ?? get_bloginfo( 'name' );
+
 		$replacements = array(
 			'{client_name}'  => $appointment['client_name'] ?? '',
 			'{date}'         => $date_fr,
 			'{heure}'        => $date->format( 'H:i' ),
 			'{service}'      => $service,
 			'{commercial}'   => $appointment['technician_name'] ?? '',
-			'{company_name}' => $settings['company_name'] ?? get_bloginfo( 'name' ),
-			'{manage_url}'   => MP_Agenda_Calendar_Links::manage_url( (int) ( $appointment['id'] ?? 0 ) ),
+			'{company_name}' => $company,
+			'{manage_url}'   => $no_contact_info
+				? $company
+				: MP_Agenda_Calendar_Links::manage_url( (int) ( $appointment['id'] ?? 0 ) ),
 		);
 
 		return strtr( (string) $template, $replacements );
@@ -685,6 +768,13 @@ class MP_Agenda_SMS {
 			'start_datetime'    => ( new DateTime( 'tomorrow 10:30', wp_timezone() ) )->format( 'Y-m-d H:i:s' ),
 		);
 
-		return $this->send_sms( $phone, '[Test] ' . $this->render_message( $s['message_j1'], $appointment ) );
+		if ( $this->will_use_sender_for_response() ) {
+			// Numéro court OVH : aucun lien / téléphone / e-mail autorisé.
+			$message = __( 'Ceci est un SMS test depuis MP Agenda. Si vous recevez ce message, la configuration est correcte.', 'mp-agenda' );
+		} else {
+			$message = '[Test] ' . $this->render_message( $s['message_j1'], $appointment );
+		}
+
+		return $this->send_sms( $phone, $message );
 	}
 }
