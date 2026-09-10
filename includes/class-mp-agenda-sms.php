@@ -294,6 +294,7 @@ class MP_Agenda_SMS {
 			|| false !== strpos( $error, 'invalid' )
 			|| false !== strpos( $error, 'unknown' )
 			|| false !== strpos( $error, 'disable' )
+			|| false !== strpos( $error, 'refused' )
 		);
 	}
 
