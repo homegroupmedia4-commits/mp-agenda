@@ -325,6 +325,8 @@ class MP_Agenda_SMS {
 		} elseif ( $sender_for_response ) {
 			// Aucun expéditeur validé : numéro court virtuel OVH.
 			$payload['senderForResponse'] = true;
+			// OVH impose la clause STOP sur les numéros courts virtuels.
+			$payload['noStopClause'] = false;
 		}
 
 		$body = wp_json_encode( $payload );
