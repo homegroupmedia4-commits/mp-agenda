@@ -40,6 +40,13 @@
 		this.selectedTechnicianId = 0; // 0 = "peu importe".
 		this.selectedTechnicianForSlot = null;
 
+		// Créneaux déjà chargés, par jour (+ durée + commercial) : évite de
+		// rappeler l'API (et Google FreeBusy) si le client revient sur un jour
+		// déjà consulté. Vidé dès que le contexte qui détermine les créneaux
+		// disponibles change (showroom, service ou commercial) — voir
+		// selectShowroom()/selectService()/selectTechnician().
+		this.slotsCache = {};
+
 		this.currentMonth = new Date();
 		this.currentMonth.setDate( 1 );
 		this.selectedDate = null;
@@ -241,6 +248,7 @@
 		this.selectedTechnicianId = 0;
 		this.selectedDate = null;
 		this.selectedTime = null;
+		this.slotsCache = {}; // Les commerciaux (donc les créneaux) changent avec le showroom.
 		this.root.querySelectorAll( '.mp-agenda-technician-card' ).forEach( function ( c ) {
 			c.classList.remove( 'is-selected' );
 		} );
@@ -320,9 +328,11 @@
 
 		this.setFicheRow( 'service', service.name );
 
-		// La durée du créneau dépend du service : on réinitialise la date/heure.
+		// La durée du créneau dépend du service : on réinitialise la date/heure
+		// et on vide le cache des créneaux (calculés pour l'ancienne durée).
 		this.selectedDate = null;
 		this.selectedTime = null;
+		this.slotsCache = {};
 		this.setFicheRow( 'datetime', '' );
 	};
 
@@ -391,9 +401,11 @@
 
 		this.setFicheRow( 'technician', name );
 
-		// Réinitialise la sélection de date/heure si on change de commercial.
+		// Réinitialise la sélection de date/heure si on change de commercial, et
+		// vide le cache des créneaux (calculés pour l'ancien commercial).
 		this.selectedDate = null;
 		this.selectedTime = null;
+		this.slotsCache = {};
 		this.setFicheRow( 'datetime', '' );
 	};
 
@@ -513,13 +525,30 @@
 		this.loadSlots();
 	};
 
-	MPAgendaBooking.prototype.loadSlots = function () {
+	/**
+	 * Charge les créneaux disponibles pour this.selectedDate.
+	 *
+	 * @param {boolean} [forceRefresh] Si true, ignore le cache et interroge le
+	 *   serveur (utilisé après un conflit de créneau détecté à la soumission —
+	 *   voir submitBooking() — où le cache serait alors périmé).
+	 */
+	MPAgendaBooking.prototype.loadSlots = function ( forceRefresh ) {
 		var self = this;
 		var slotsEl = document.getElementById( 'mp-agenda-slots' );
+
+		var duration = this.selectedServiceDuration || 60;
+		var cacheKey = this.selectedDate + '|' + duration + '|' + ( this.selectedTechnicianId || 'any' );
+
+		// Jour déjà consulté dans le même contexte (showroom/service/commercial) :
+		// affichage immédiat depuis le cache, sans repasser par le serveur ni Google.
+		if ( ! forceRefresh && this.slotsCache[ cacheKey ] ) {
+			this.renderSlots( this.slotsCache[ cacheKey ] );
+			return;
+		}
+
 		slotsEl.innerHTML = '<div class="mp-agenda-loading">' + cfg.i18n.loading + '</div>';
 
 		var techs = this.getTechniciansForAvailability();
-		var duration = this.selectedServiceDuration || 60;
 
 		Promise.all(
 			techs.map( function ( tech ) {
@@ -533,7 +562,14 @@
 					} );
 			} )
 		).then( function ( results ) {
-			self.renderSlots( results );
+			self.slotsCache[ cacheKey ] = results;
+			// La date/le contexte peuvent avoir changé pendant l'attente réseau (clic
+			// sur un autre jour) : n'affiche ce résultat que s'il correspond toujours
+			// à la sélection courante, pour ne pas écraser un chargement plus récent.
+			var currentKey = self.selectedDate + '|' + ( self.selectedServiceDuration || 60 ) + '|' + ( self.selectedTechnicianId || 'any' );
+			if ( currentKey === cacheKey ) {
+				self.renderSlots( results );
+			}
 		} );
 	};
 
@@ -728,7 +764,9 @@
 
 				if ( 'mp_agenda_slot_taken' === err.code ) {
 					self.goToStep( '4' );
-					self.loadSlots();
+					// forceRefresh=true : le cache serait périmé (le créneau vient
+					// d'être pris par quelqu'un d'autre), on doit repasser par le serveur.
+					self.loadSlots( true );
 				}
 			} )
 			.finally( function () {

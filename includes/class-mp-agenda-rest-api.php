@@ -338,13 +338,12 @@ class MP_Agenda_REST_API {
 		$id = MP_Agenda_DB::save_appointment( $data );
 		$appointment = MP_Agenda_DB::get_appointment( $id );
 
-		$google_sync = new MP_Agenda_Google_Sync();
-		$google_sync->push_appointment( $appointment );
+		// La synchro Google Agenda et l'email de confirmation sont différés après
+		// l'envoi de la réponse HTTP — voir MP_Agenda_Async. L'admin voit son RDV
+		// créé instantanément sans attendre ces effets de bord.
+		MP_Agenda_Async::queue( 'create', $appointment );
 
-		$notifications = new MP_Agenda_Notifications();
-		$notifications->send_appointment_notifications( MP_Agenda_DB::get_appointment( $id ) );
-
-		return new WP_REST_Response( MP_Agenda_DB::get_appointment( $id ), 201 );
+		return new WP_REST_Response( $appointment, 201 );
 	}
 
 	/**
@@ -371,8 +370,8 @@ class MP_Agenda_REST_API {
 		MP_Agenda_DB::save_appointment( $data, $id );
 		$appointment = MP_Agenda_DB::get_appointment( $id );
 
-		$google_sync = new MP_Agenda_Google_Sync();
-		$google_sync->push_appointment( $appointment );
+		// Synchro Google différée après l'envoi de la réponse — voir MP_Agenda_Async.
+		MP_Agenda_Async::queue( 'update', $appointment );
 
 		return new WP_REST_Response( $appointment, 200 );
 	}
@@ -391,12 +390,14 @@ class MP_Agenda_REST_API {
 			return new WP_Error( 'mp_agenda_not_found', __( 'Rendez-vous introuvable.', 'mp-agenda' ), array( 'status' => 404 ) );
 		}
 
-		if ( ! empty( $existing['google_event_id'] ) ) {
-			$google_sync = new MP_Agenda_Google_Sync();
-			$google_sync->delete_event( $existing );
-		}
-
 		MP_Agenda_DB::delete_appointment( $id );
+
+		// Suppression de l'événement Google différée après l'envoi de la réponse —
+		// on passe un instantané ($existing) plutôt qu'un ID car la ligne vient
+		// d'être supprimée en base (voir MP_Agenda_Async::queue()).
+		if ( ! empty( $existing['google_event_id'] ) ) {
+			MP_Agenda_Async::queue( 'delete', $existing );
+		}
 
 		return new WP_REST_Response( array( 'deleted' => true ), 200 );
 	}
@@ -936,17 +937,13 @@ class MP_Agenda_REST_API {
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 			error_log( sprintf( '[MP Agenda] book_appointment: MP_Agenda_DB::get_appointment(%d) a retourné null après création du RDV — synchro Google et notifications email ignorées.', $id ) );
 		} else {
-			$google_sync = new MP_Agenda_Google_Sync();
-			$google_sync->push_appointment( $appointment );
-
+			// Synchro Google + email de confirmation différés après l'envoi de la
+			// réponse HTTP (voir MP_Agenda_Async) : le client voit son RDV confirmé
+			// sans attendre ces effets de bord. Les liens "Ajouter au calendrier"
+			// ci-dessous n'en dépendent pas (voir MP_Agenda_Calendar_Links).
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( '[MP Agenda] sending notifications...' );
-
-			$notifications = new MP_Agenda_Notifications();
-			$notifications->send_appointment_notifications( $appointment );
-
-			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-			error_log( '[MP Agenda] notifications sent' );
+			error_log( '[MP Agenda] synchro Google + notifications mises en file (traitement différé)' );
+			MP_Agenda_Async::queue( 'create', $appointment );
 		}
 
 		$response_appointment = array(
@@ -1124,11 +1121,8 @@ class MP_Agenda_REST_API {
 
 		$updated = MP_Agenda_DB::get_appointment( (int) $appointment['id'] );
 
-		$google_sync = new MP_Agenda_Google_Sync();
-		$google_sync->push_appointment( $updated );
-
-		$notifications = new MP_Agenda_Notifications();
-		$notifications->send_appointment_change_notifications( $updated, 'modified' );
+		// Synchro Google + email différés après l'envoi de la réponse — voir MP_Agenda_Async.
+		MP_Agenda_Async::queue( 'update', $updated );
 
 		return new WP_REST_Response( $this->format_managed_appointment( $updated ), 200 );
 	}
@@ -1152,15 +1146,11 @@ class MP_Agenda_REST_API {
 
 		MP_Agenda_DB::save_appointment( array( 'status' => 'cancelled' ), (int) $appointment['id'] );
 
-		if ( ! empty( $appointment['google_event_id'] ) ) {
-			$google_sync = new MP_Agenda_Google_Sync();
-			$google_sync->delete_event( $appointment );
-		}
-
 		$updated = MP_Agenda_DB::get_appointment( (int) $appointment['id'] );
 
-		$notifications = new MP_Agenda_Notifications();
-		$notifications->send_appointment_change_notifications( $updated, 'cancelled' );
+		// Suppression de l'événement Google + email d'annulation différés après la
+		// réponse — voir MP_Agenda_Async.
+		MP_Agenda_Async::queue( 'cancel', $updated );
 
 		return new WP_REST_Response( array( 'status' => 'cancelled' ), 200 );
 	}

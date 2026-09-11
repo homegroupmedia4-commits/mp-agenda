@@ -55,6 +55,25 @@
 		return d;
 	}
 
+	/**
+	 * Affiche une notification légère (toast) en bas à droite de l'écran, utilisée
+	 * pour signaler l'échec d'une action optimiste (RDV créé/modifié/supprimé
+	 * localement puis annulé suite à une erreur serveur).
+	 */
+	function showNotification( message, isError ) {
+		var el = document.createElement( 'div' );
+		el.className = 'mp-agenda-toast' + ( isError ? ' mp-agenda-toast-error' : '' );
+		el.textContent = message;
+		el.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:100000;' +
+			'max-width:320px;padding:12px 18px;border-radius:4px;color:#fff;' +
+			'font-size:13px;line-height:1.4;box-shadow:0 2px 8px rgba(0,0,0,.2);' +
+			'background:' + ( isError ? '#d63638' : '#1d2327' ) + ';';
+		document.body.appendChild( el );
+		setTimeout( function () {
+			el.remove();
+		}, 5000 );
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Media picker (page Commerciaux)
 	 * ------------------------------------------------------------------- */
@@ -225,11 +244,13 @@
 			var id = document.getElementById( 'mp-appt-id' ).value;
 			var date = document.getElementById( 'mp-appt-date' ).value;
 			var time = document.getElementById( 'mp-appt-time' ).value;
+			var duration = parseInt( document.getElementById( 'mp-appt-duration' ).value, 10 );
+			var startDatetime = date + ' ' + time + ':00';
 
 			var payload = {
 				technician_id: parseInt( document.getElementById( 'mp-appt-technician' ).value, 10 ),
-				start_datetime: date + ' ' + time + ':00',
-				duration: parseInt( document.getElementById( 'mp-appt-duration' ).value, 10 ),
+				start_datetime: startDatetime,
+				duration: duration,
 				client_name: document.getElementById( 'mp-appt-client-name' ).value,
 				client_phone: document.getElementById( 'mp-appt-client-phone' ).value,
 				client_email: document.getElementById( 'mp-appt-client-email' ).value,
@@ -242,17 +263,73 @@
 				source: 'admin',
 			};
 
+			// Page "Liste des RDV" (pas de planning local à mettre à jour de façon
+			// optimiste — Calendar.el n'existe pas sur cette page) : comportement
+			// d'origine, on attend la réponse puis on recharge la page.
+			if ( ! Calendar.el ) {
+				var listRequest = id
+					? apiRequest( '/appointments/' + id, 'PUT', payload )
+					: apiRequest( '/appointments', 'POST', payload );
+
+				listRequest
+					.then( function () {
+						Modal.close();
+						document.dispatchEvent( new CustomEvent( 'mp-agenda-refresh' ) );
+					} )
+					.catch( function ( err ) {
+						Modal.showError( err.message || cfg.i18n.saveError );
+					} );
+				return;
+			}
+
+			// Planning (Dashboard) : Optimistic UI — on affiche immédiatement le RDV
+			// créé/modifié et on ferme la modale, la requête part en arrière-plan.
+			// En cas d'échec, le changement visuel est annulé (voir .catch ci-dessous).
+			var serviceSelect = document.getElementById( 'mp-appt-service' );
+			var serviceName = serviceSelect && serviceSelect.selectedIndex > -1 ? serviceSelect.options[ serviceSelect.selectedIndex ].text : '';
+			var technicianSelect = document.getElementById( 'mp-appt-technician' );
+			var technicianName = technicianSelect && technicianSelect.selectedIndex > -1 ? technicianSelect.options[ technicianSelect.selectedIndex ].text : '';
+
+			var endDate = new Date( startDatetime.replace( ' ', 'T' ) );
+			endDate.setMinutes( endDate.getMinutes() + ( duration || 60 ) );
+
+			var optimisticId = id || ( 'tmp-' + Date.now() );
+			var optimisticAppointment = Object.assign( {}, payload, {
+				id: optimisticId,
+				end_datetime: formatDate( endDate ) + ' ' + pad( endDate.getHours() ) + ':' + pad( endDate.getMinutes() ) + ':00',
+				service_name: serviceName,
+				technician_name: technicianName,
+			} );
+
+			var previousAppointment = id
+				? Calendar.appointments.filter( function ( a ) {
+					return String( a.id ) === String( id );
+				} )[ 0 ]
+				: null;
+
+			Calendar.addOrUpdateAppointmentLocally( optimisticAppointment );
+			Modal.close();
+
 			var request = id
 				? apiRequest( '/appointments/' + id, 'PUT', payload )
 				: apiRequest( '/appointments', 'POST', payload );
 
 			request
-				.then( function () {
-					Modal.close();
-					document.dispatchEvent( new CustomEvent( 'mp-agenda-refresh' ) );
+				.then( function ( saved ) {
+					// Remplace l'entrée optimiste par les données réelles renvoyées par
+					// le serveur (id définitif pour une création, valeurs normalisées).
+					if ( ! id ) {
+						Calendar.removeAppointmentLocally( optimisticId );
+					}
+					Calendar.addOrUpdateAppointmentLocally( saved );
 				} )
 				.catch( function ( err ) {
-					Modal.showError( err.message || cfg.i18n.saveError );
+					if ( id && previousAppointment ) {
+						Calendar.addOrUpdateAppointmentLocally( previousAppointment );
+					} else {
+						Calendar.removeAppointmentLocally( optimisticId );
+					}
+					showNotification( err.message || cfg.i18n.saveError, true );
 				} );
 		},
 
@@ -264,9 +341,30 @@
 			if ( ! window.confirm( cfg.i18n.confirmDelete ) ) {
 				return;
 			}
-			apiRequest( '/appointments/' + id, 'DELETE' ).then( function () {
-				Modal.close();
-				document.dispatchEvent( new CustomEvent( 'mp-agenda-refresh' ) );
+
+			// Page "Liste des RDV" : comportement d'origine.
+			if ( ! Calendar.el ) {
+				apiRequest( '/appointments/' + id, 'DELETE' ).then( function () {
+					Modal.close();
+					document.dispatchEvent( new CustomEvent( 'mp-agenda-refresh' ) );
+				} );
+				return;
+			}
+
+			// Planning (Dashboard) : retrait optimiste immédiat, suppression en
+			// arrière-plan ; restauration + notification d'erreur en cas d'échec.
+			var removed = Calendar.appointments.filter( function ( a ) {
+				return String( a.id ) === String( id );
+			} )[ 0 ];
+
+			Calendar.removeAppointmentLocally( id );
+			Modal.close();
+
+			apiRequest( '/appointments/' + id, 'DELETE' ).catch( function ( err ) {
+				if ( removed ) {
+					Calendar.addOrUpdateAppointmentLocally( removed );
+				}
+				showNotification( err.message || cfg.i18n.saveError, true );
 			} );
 		},
 	};
@@ -284,6 +382,11 @@
 		startHour: 7,
 		endHour: 20,
 		slotHeight: 40,
+
+		// Copie locale des RDV/créneaux bloqués affichés, utilisée pour redessiner
+		// le planning instantanément (Optimistic UI) sans repasser par le serveur.
+		appointments: [],
+		blockedSlots: [],
 
 		init: function () {
 			this.el = document.getElementById( 'mp-agenda-calendar' );
@@ -400,12 +503,20 @@
 			] )
 				.then(
 					function ( results ) {
+						var appointments = results[ 0 ].items || [];
 						var blockedSlots = results[ 1 ].items || [];
 						console.log( '[MP Agenda] Blocked slots received: ' + blockedSlots.length );
+
+						// Mémorisé pour permettre un redessin local (Optimistic UI) sans
+						// nouvel appel serveur — voir addOrUpdateAppointmentLocally() et
+						// removeAppointmentLocally().
+						this.appointments = appointments;
+						this.blockedSlots = blockedSlots;
+
 						if ( 'month' === this.view ) {
-							this.drawMonth( range, results[ 0 ].items || [], blockedSlots );
+							this.drawMonth( range, appointments, blockedSlots );
 						} else {
-							this.draw( range, results[ 0 ].items || [], blockedSlots );
+							this.draw( range, appointments, blockedSlots );
 						}
 					}.bind( this )
 				)
@@ -414,6 +525,47 @@
 						this.el.innerHTML = '<div class="mp-agenda-calendar-loading">Impossible de charger le planning.</div>';
 					}.bind( this )
 				);
+		},
+
+		/**
+		 * Redessine le planning à partir des données déjà en mémoire (this.appointments
+		 * / this.blockedSlots), sans requête serveur — utilisé par les mises à jour
+		 * optimistes après création/modification/suppression d'un RDV.
+		 */
+		redraw: function () {
+			var range = this.getRange();
+			if ( 'month' === this.view ) {
+				this.drawMonth( range, this.appointments, this.blockedSlots );
+			} else {
+				this.draw( range, this.appointments, this.blockedSlots );
+			}
+		},
+
+		/**
+		 * Ajoute ou remplace un RDV dans la copie locale, puis redessine.
+		 */
+		addOrUpdateAppointmentLocally: function ( appointment ) {
+			// Comparaison en chaîne (pas parseInt) : un RDV pas encore confirmé par
+			// le serveur porte un id temporaire non numérique ("tmp-…").
+			var idx = this.appointments.findIndex( function ( a ) {
+				return String( a.id ) === String( appointment.id );
+			} );
+			if ( idx > -1 ) {
+				this.appointments[ idx ] = appointment;
+			} else {
+				this.appointments.push( appointment );
+			}
+			this.redraw();
+		},
+
+		/**
+		 * Retire un RDV de la copie locale, puis redessine.
+		 */
+		removeAppointmentLocally: function ( id ) {
+			this.appointments = this.appointments.filter( function ( a ) {
+				return String( a.id ) !== String( id );
+			} );
+			this.redraw();
 		},
 
 		formatLabel: function ( range ) {
@@ -679,9 +831,11 @@
 			this.el.querySelectorAll( '.mp-agenda-month-event[data-appt-id]' ).forEach( function ( btn ) {
 				btn.addEventListener( 'click', function ( e ) {
 					e.stopPropagation();
-					var id = parseInt( btn.dataset.apptId, 10 );
+					// Comparaison en chaîne : un RDV pas encore confirmé par le serveur
+					// (Optimistic UI) porte un id temporaire non numérique ("tmp-…").
+					var id = btn.dataset.apptId;
 					var appt = appointments.filter( function ( a ) {
-						return parseInt( a.id, 10 ) === id;
+						return String( a.id ) === String( id );
 					} )[ 0 ];
 					if ( appt ) {
 						Modal.openForEdit( appt );

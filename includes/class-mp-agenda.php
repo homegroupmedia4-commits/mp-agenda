@@ -97,6 +97,10 @@ class MP_Agenda {
 		// Même cron horaire : rappels SMS J-3 et J-1 (OVH).
 		add_action( 'mp_agenda_send_reminders_cron', array( $this->sms, 'send_due_sms_reminders' ) );
 
+		// Traitement différé de la synchro Google + des emails déclenchés par les
+		// actions de RDV, exécuté après l'envoi de la réponse HTTP — voir MP_Agenda_Async.
+		MP_Agenda_Async::init();
+
 		$this->admin->init();
 		$this->public_area->init();
 		$this->rest_api->init();
